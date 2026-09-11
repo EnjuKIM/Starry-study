@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>星座づくり - 별자리 만들기</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg-deep:#151527;--bg-mid:#1c1c38;--bg-light:#252548;
+  --bg-night:#06060f;
+  --star-white:#fff;--star-warm:#ffe8a1;--star-blue:#a8d8ff;
+  --gold:#ffd700;--gold-dim:rgba(255,215,0,.35);
+  --purple:#a78bfa;--purple-dim:rgba(167,139,250,.25);
+  --glass:rgba(255,255,255,.07);--glass-border:rgba(255,255,255,.12);
+  --glass-hover:rgba(255,255,255,.14);
+  --text:#f0f0f5;--text-dim:rgba(240,240,245,.72);--text-faint:rgba(240,240,245,.45);
+  --dawn-warm:rgba(200,160,120,.06);
+  --green:#4ade80;--red:#f87171;--blue:#60a5fa;
+  --radius:16px;--radius-sm:10px;
+  --nav-h:64px;
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;overflow:hidden;background:#151527;color:var(--text);font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;font-size:15px;line-height:1.5}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;outline:none}
+input,textarea,select{font:inherit;color:inherit;background:none;border:none;outline:none}
+
+/* ===== Layout ===== */
+.app{height:100%;display:flex;flex-direction:column}
+.views{flex:1;overflow:hidden;position:relative}
+.view{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding-bottom:calc(var(--nav-h) + var(--safe-bottom) + 16px);display:none;background:linear-gradient(180deg,var(--bg-deep) 0%,#1a1a32 50%,#1e1e38 100%)}
+.view.active{display:block}
+.view::-webkit-scrollbar{display:none}
+
+/* ===== Navigation ===== */
+.nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:rgba(20,20,38,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--glass-border);padding:6px 0 calc(6px + var(--safe-bottom));z-index:100}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:10px;color:var(--text-faint);transition:color .2s}
+.nav-btn.active{color:var(--gold)}
+.nav-btn .icon{font-size:22px;line-height:1}
+
+/* ===== Glass Components ===== */
+.glass{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--glass-border);border-radius:var(--radius)}
+.glass-sm{background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-sm)}
+.card{padding:16px;margin:0 16px 12px}
+
+/* ===== Sky View ===== */
+#viewSky{background:linear-gradient(180deg,var(--bg-night) 0%,#0e0e22 30%,var(--bg-deep) 55%,#1a1a32 75%,#1e1e38 100%)}
+.sky-container{position:relative;width:100%;height:55vh;min-height:300px;overflow:hidden;background:linear-gradient(180deg,var(--bg-night) 0%,#08082a 40%,#101040 70%,#181850 100%)}
+.sky-stars{position:absolute;inset:0}
+.sky-star{position:absolute;border-radius:50%;background:var(--star-white)}
+.sky-star.warm{background:var(--star-warm)}
+.sky-star.blue{background:var(--star-blue)}
+@keyframes twinkle{0%,100%{opacity:var(--o)}50%{opacity:calc(var(--o) * .25)}}
+
+.sky-svg{position:absolute;inset:0;width:100%;height:100%}
+.constellation{opacity:0;transition:opacity 1.5s ease-in}
+.constellation.unlocked{opacity:1}
+.const-line{stroke:var(--gold-dim);stroke-width:.3;stroke-linecap:round}
+.constellation.unlocked .const-line{stroke:rgba(255,215,0,.5)}
+.const-star{fill:var(--gold);filter:url(#starGlow)}
+.const-label{fill:var(--text-dim);font-size:2.5px;text-anchor:middle;font-family:-apple-system,'Segoe UI',sans-serif;opacity:0;transition:opacity 1.5s}
+.constellation.unlocked .const-label{opacity:.8}
+
+.milky-way{position:absolute;top:-20%;left:-10%;width:120%;height:140%;background:linear-gradient(135deg,transparent 25%,rgba(167,139,250,.08) 35%,rgba(140,140,255,.14) 45%,rgba(200,180,255,.16) 50%,rgba(140,140,255,.14) 55%,rgba(167,139,250,.08) 65%,transparent 75%);opacity:0;transition:opacity 2s;transform:rotate(-20deg);pointer-events:none;filter:blur(8px)}
+.milky-way.visible{opacity:1}
+
+.shooting-star{position:absolute;width:60px;height:1px;background:linear-gradient(90deg,rgba(255,255,255,.8),transparent);border-radius:1px;opacity:0;pointer-events:none}
+@keyframes shoot{0%{transform:translate(0,0) rotate(-35deg);opacity:1}100%{transform:translate(200px,120px) rotate(-35deg);opacity:0}}
+
+.sky-horizon{position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(transparent,rgba(16,16,34,.95))}
+.sky-mountain{position:absolute;bottom:0;left:0;right:0;height:40px}
+.sky-mountain svg{width:100%;height:100%;display:block}
+
+/* Sky Info Overlay */
+.sky-info{position:absolute;bottom:50px;left:0;right:0;text-align:center;padding:0 20px}
+.sky-progress-text{font-size:32px;font-weight:700;color:var(--gold);text-shadow:0 0 30px rgba(255,215,0,.3)}
+.sky-progress-text small{font-size:14px;font-weight:400;color:var(--text-dim)}
+.sky-sub{font-size:12px;color:var(--text-dim);margin-top:4px}
+
+/* Progress Bar */
+.progress-wrap{margin:16px 16px 8px;position:relative}
+.progress-bar{height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--purple),var(--gold));border-radius:3px;transition:width .8s ease;position:relative}
+.progress-fill::after{content:'';position:absolute;right:0;top:-2px;width:10px;height:10px;background:var(--gold);border-radius:50%;box-shadow:0 0 10px var(--gold);transition:opacity .3s}
+.progress-fill[style*="width:0%"]::after,.progress-fill[style*="width: 0%"]::after{opacity:0}
+.progress-labels{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text-faint)}
+
+/* Stats Row */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 16px}
+.stat-item{text-align:center;padding:12px 4px}
+.stat-value{font-size:20px;font-weight:700;color:var(--gold)}
+.stat-label{font-size:10px;color:var(--text-faint);margin-top:2px}
+
+/* Quote */
+.quote-box{margin:4px 16px;padding:14px;text-align:center}
+.quote-jp{font-size:15px;color:var(--text);margin-bottom:4px}
+.quote-ko{font-size:11px;color:var(--text-faint)}
+
+/* D-Day Badge */
+.dday-badge{position:absolute;top:12px;right:12px;padding:6px 12px;border-radius:20px;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);font-size:12px;color:var(--gold);z-index:5}
+
+/* Constellation Unlock Toast */
+.unlock-toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.8);background:rgba(18,18,36,.96);backdrop-filter:blur(20px);border:1px solid var(--gold-dim);border-radius:20px;padding:32px 40px;text-align:center;z-index:200;opacity:0;pointer-events:none;transition:all .5s}
+.unlock-toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.unlock-toast .emoji{font-size:48px;margin-bottom:12px}
+.unlock-toast .title{font-size:18px;font-weight:700;color:var(--gold);margin-bottom:4px}
+.unlock-toast .desc{font-size:13px;color:var(--text-dim)}
+
+/* ===== Timer View ===== */
+.timer-section{padding:20px 16px}
+.timer-display{font-family:'Courier New',monospace;font-size:56px;font-weight:700;text-align:center;color:var(--text);letter-spacing:3px;padding:24px 0;text-shadow:0 0 20px rgba(255,255,255,.1)}
+.timer-display.running{color:var(--gold);text-shadow:0 0 30px rgba(255,215,0,.3)}
+.timer-btns{display:flex;gap:12px;justify-content:center;padding:8px 0 24px}
+.timer-btn{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;transition:all .2s}
+.timer-btn.primary{background:linear-gradient(135deg,#667eea,#764ba2);box-shadow:0 4px 20px rgba(102,126,234,.3)}
+.timer-btn.primary:active{transform:scale(.92)}
+.timer-btn.danger{background:rgba(248,113,113,.15);color:var(--red)}
+.timer-btn.success{background:rgba(74,222,128,.15);color:var(--green)}
+.timer-btn:disabled{opacity:.3;pointer-events:none}
+
+.manual-section{margin-top:8px}
+.section-title{font-size:13px;font-weight:600;color:var(--text-dim);margin-bottom:12px;padding:0 4px;display:flex;align-items:center;gap:6px}
+.input-row{display:flex;gap:8px;margin-bottom:10px}
+.input-group{flex:1}
+.input-group label{display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px}
+.input-field{width:100%;padding:10px 12px;background:rgba(255,255,255,.06);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text);font-size:14px;transition:border-color .2s}
+.input-field:focus{border-color:var(--purple-dim)}
+.input-field::placeholder{color:var(--text-faint)}
+
+.btn{padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;text-align:center;transition:all .2s}
+.btn:active{transform:scale(.96)}
+.btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+.btn-gold{background:linear-gradient(135deg,var(--gold),#f0b400);color:#000}
+.btn-outline{border:1px solid var(--glass-border);color:var(--text-dim)}
+.btn-danger{background:rgba(248,113,113,.12);color:var(--red)}
+.btn-block{display:block;width:100%}
+
+/* Recent Logs */
+.log-list{margin-top:16px}
+.log-item{display:flex;align-items:center;gap:12px;padding:12px;margin-bottom:8px}
+.log-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.log-dot.sw{background:var(--purple)}
+.log-dot.manual{background:var(--blue)}
+.log-info{flex:1;min-width:0}
+.log-date{font-size:11px;color:var(--text-faint)}
+.log-time{font-size:15px;font-weight:600}
+.log-note{font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log-delete{color:var(--text-faint);font-size:18px;padding:4px 8px}
+
+/* ===== Calendar View ===== */
+.cal-header{display:flex;align-items:center;justify-content:space-between;padding:16px}
+.cal-title{font-size:18px;font-weight:700}
+.cal-nav{display:flex;gap:4px}
+.cal-nav button{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:18px}
+.cal-nav button:active{background:var(--glass)}
+.cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);padding:0 8px;margin-bottom:4px}
+.cal-weekday{text-align:center;font-size:11px;color:var(--text-faint);padding:4px 0}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:0 8px}
+.cal-day{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;font-size:13px;color:var(--text-dim);position:relative;cursor:pointer;transition:background .2s}
+.cal-day:active{background:var(--glass)}
+.cal-day.today{color:var(--gold);font-weight:700}
+.cal-day.has-study::after{content:'';position:absolute;bottom:6px;width:4px;height:4px;border-radius:50%;background:var(--purple)}
+.cal-day.has-diary::before{content:'';position:absolute;top:6px;right:6px;width:4px;height:4px;border-radius:50%;background:var(--gold)}
+.cal-day.other-month{opacity:.25}
+.cal-summary{margin:12px 16px}
+
+/* ===== Day Detail Modal ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:150;opacity:0;pointer-events:none;transition:opacity .3s}
+.modal-overlay.show{opacity:1;pointer-events:auto}
+.modal{position:fixed;bottom:0;left:0;right:0;max-height:85vh;background:linear-gradient(180deg,#1e1e3a,#222244);border-radius:20px 20px 0 0;z-index:151;transform:translateY(100%);transition:transform .35s ease;overflow-y:auto;padding-bottom:calc(16px + var(--safe-bottom))}
+.modal.show{transform:translateY(0)}
+.modal-handle{width:40px;height:4px;background:rgba(255,255,255,.2);border-radius:2px;margin:10px auto}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:8px 20px 16px}
+.modal-title{font-size:17px;font-weight:700}
+.modal-close{font-size:24px;color:var(--text-faint);padding:4px}
+.modal-body{padding:0 20px 20px}
+
+/* Diary Section */
+.diary-textarea{width:100%;min-height:100px;padding:12px;background:rgba(255,255,255,.06);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text);font-size:14px;resize:vertical;line-height:1.6}
+.diary-textarea::placeholder{color:var(--text-faint)}
+.photo-preview{margin:12px 0;position:relative;display:inline-block}
+.photo-preview img{max-width:100%;max-height:200px;border-radius:var(--radius-sm);display:block}
+.photo-remove{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.7);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center}
+.photo-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;font-size:13px;color:var(--text-dim);border:1px dashed var(--glass-border);border-radius:var(--radius-sm);cursor:pointer}
+.photo-btn:active{background:var(--glass)}
+
+/* ===== Textbook View ===== */
+.textbook-section{padding:16px}
+.textbook-card{padding:14px;margin-bottom:10px}
+.textbook-top{display:flex;align-items:center;gap:10px}
+.textbook-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--purple-dim),var(--gold-dim));display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.textbook-info{flex:1;min-width:0}
+.textbook-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.textbook-date{font-size:11px;color:var(--text-faint)}
+.textbook-actions{display:flex;gap:2px;flex-shrink:0}
+.textbook-actions button{padding:6px;color:var(--text-faint);font-size:15px}
+.book-progress{margin-top:10px}
+.book-progress-bar{height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;cursor:pointer}
+.book-progress-fill{height:100%;border-radius:4px;transition:width .5s ease}
+.book-progress-fill.active{background:linear-gradient(90deg,var(--purple),var(--blue))}
+.book-progress-fill.done{background:linear-gradient(90deg,var(--gold),#f0b400)}
+.book-progress-text{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-faint);margin-top:5px}
+.book-progress-text .pct{font-size:13px;font-weight:700;color:var(--purple)}
+.book-progress-text .pct.done{color:var(--gold)}
+.book-page-edit{display:flex;align-items:center;gap:6px;margin-top:8px}
+.book-page-input{width:60px;padding:6px 8px;text-align:center;background:rgba(255,255,255,.08);border:1px solid var(--glass-border);border-radius:6px;font-size:13px;color:var(--text)}
+.book-page-edit span{font-size:12px;color:var(--text-faint)}
+.book-page-edit button{font-size:12px;padding:4px 10px;border-radius:6px;background:var(--purple-dim);color:var(--purple)}
+
+.add-textbook{margin-top:16px;padding:14px}
+.add-textbook .add-row{display:flex;gap:8px;margin-bottom:8px}
+.add-textbook .add-row input{flex:1}
+.add-textbook .add-row input.pages-input{max-width:90px;text-align:center}
+
+/* ===== Settings View ===== */
+.settings-section{padding:16px}
+.setting-group{margin-bottom:20px}
+.setting-group-title{font-size:12px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding:0 4px}
+.setting-item{display:flex;align-items:center;justify-content:space-between;padding:14px;margin-bottom:2px;cursor:pointer}
+.setting-item:active{background:var(--glass-hover)}
+.setting-label{font-size:14px}
+.setting-value{font-size:13px;color:var(--text-dim);display:flex;align-items:center;gap:6px}
+
+/* ===== Trend Chart ===== */
+.trend-section{margin:4px 16px 12px}
+.trend-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.trend-header .section-title{margin:0}
+.trend-tabs{display:flex;gap:4px}
+.trend-tab{padding:4px 10px;border-radius:6px;font-size:11px;color:var(--text-faint);background:transparent;transition:all .2s}
+.trend-tab.active{background:var(--purple-dim);color:var(--purple)}
+.trend-chart{display:flex;align-items:flex-end;gap:3px;height:100px;padding:8px 0}
+.trend-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+.trend-bar{width:100%;border-radius:3px 3px 0 0;background:linear-gradient(180deg,var(--purple),var(--blue));min-height:0;transition:height .4s ease}
+.trend-bar.zero{background:rgba(255,255,255,.06);min-height:2px}
+.trend-label{font-size:9px;color:var(--text-faint);white-space:nowrap}
+.trend-value{font-size:8px;color:var(--text-dim)}
+.trend-goal-line{position:relative;width:100%;margin-top:-1px}
+.trend-goal-line::before{content:'';position:absolute;left:0;right:0;border-top:1px dashed var(--gold-dim)}
+.trend-goal-text{position:absolute;right:0;top:-14px;font-size:9px;color:var(--gold)}
+
+/* ===== Daily Goal Badge ===== */
+.daily-goal{display:flex;align-items:center;gap:8px;padding:8px 16px;margin:0 16px 4px}
+.daily-goal-ring{width:36px;height:36px;position:relative;flex-shrink:0}
+.daily-goal-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.daily-goal-ring .ring-bg{fill:none;stroke:rgba(255,255,255,.06);stroke-width:3}
+.daily-goal-ring .ring-fill{fill:none;stroke:var(--purple);stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .6s ease}
+.daily-goal-info{flex:1;min-width:0}
+.daily-goal-info .dg-title{font-size:11px;color:var(--text-faint)}
+.daily-goal-info .dg-value{font-size:14px;font-weight:600}
+.daily-goal-info .dg-value span{color:var(--text-faint);font-weight:400;font-size:12px}
+
+/* ===== Backup Banner ===== */
+.backup-banner{margin:8px 16px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);display:flex;align-items:center;gap:10px;cursor:pointer}
+.backup-banner:active{opacity:.8}
+.backup-banner .bb-icon{font-size:18px;flex-shrink:0}
+.backup-banner .bb-text{flex:1;font-size:12px;color:var(--text-dim)}
+.backup-banner .bb-action{font-size:11px;color:var(--red);white-space:nowrap}
+
+/* ===== Timer Save Modal ===== */
+.timer-save-modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:150;display:none;align-items:center;justify-content:center;padding:20px}
+.timer-save-modal.show{display:flex}
+.timer-save-content{background:linear-gradient(180deg,#1e1e3a,#222244);border:1px solid var(--glass-border);border-radius:var(--radius);padding:24px;width:100%;max-width:340px}
+.timer-save-time{font-size:28px;font-weight:700;color:var(--gold);text-align:center;margin-bottom:16px}
+.timer-save-memo{width:100%;padding:12px;min-height:60px;background:rgba(255,255,255,.04);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text);font-size:14px;resize:none;margin-bottom:14px}
+.timer-save-memo::placeholder{color:var(--text-faint)}
+.timer-save-btns{display:flex;gap:8px}
+
+/* ===== Constellation Info Popup ===== */
+.const-info{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(18,18,36,.96);backdrop-filter:blur(20px);border:1px solid var(--glass-border);border-radius:var(--radius);padding:20px 28px;text-align:center;z-index:120;opacity:0;pointer-events:none;transition:all .3s;min-width:180px}
+.const-info.show{opacity:1;pointer-events:auto}
+.const-info .ci-name{font-size:18px;font-weight:700;color:var(--gold);margin-bottom:2px}
+.const-info .ci-ko{font-size:13px;color:var(--text-dim);margin-bottom:8px}
+.const-info .ci-hours{font-size:12px;color:var(--text-faint)}
+.const-info .ci-status{font-size:14px;margin-top:6px}
+
+/* ===== Today Study Badge ===== */
+.today-badge{position:absolute;top:12px;left:12px;padding:6px 12px;border-radius:20px;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);font-size:12px;color:var(--purple);z-index:5}
+.today-badge .tb-time{color:var(--text);font-weight:600}
+
+/* ===== Toast ===== */
+.toast{position:fixed;top:50px;left:50%;transform:translateX(-50%) translateY(-20px);background:rgba(28,28,56,.95);backdrop-filter:blur(12px);border:1px solid var(--glass-border);border-radius:12px;padding:10px 20px;font-size:13px;color:var(--text);z-index:300;opacity:0;pointer-events:none;transition:all .3s;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ===== Welcome ===== */
+.welcome-overlay{position:fixed;inset:0;background:linear-gradient(180deg,#0e0e22 0%,var(--bg-deep) 40%,#1a1a32 100%);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center}
+.welcome-overlay.hidden{display:none}
+.welcome-stars{font-size:40px;margin-bottom:20px}
+.welcome-title{font-size:24px;font-weight:700;margin-bottom:8px}
+.welcome-title span{color:var(--gold)}
+.welcome-desc{font-size:14px;color:var(--text-dim);margin-bottom:32px;line-height:1.7}
+.welcome-input{width:100%;max-width:280px;padding:14px 18px;background:var(--glass);border:1px solid var(--glass-border);border-radius:14px;color:var(--text);font-size:16px;text-align:center;margin-bottom:20px}
+.welcome-input::placeholder{color:var(--text-faint)}
+.welcome-btn{padding:14px 48px;border-radius:14px;font-size:16px;font-weight:600}
+.welcome-skip{margin-top:16px;font-size:13px;color:var(--text-faint)}
+
+/* ===== Responsive ===== */
+@media(min-width:600px){
+  .app{max-width:480px;margin:0 auto;border-left:1px solid rgba(255,255,255,.1);border-right:1px solid rgba(255,255,255,.1)}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <!-- Welcome Screen -->
+  <div class="welcome-overlay" id="welcomeScreen">
+    <div class="welcome-stars">✦ ✧ ★</div>
+    <div class="welcome-title"><span>星座づくり</span></div>
+    <div class="welcome-desc" style="font-size:15px;margin-bottom:6px;color:var(--text)">별자리 만들기</div>
+    <div class="welcome-desc">일본어 공부 시간을 기록하면<br>밤하늘에 별자리가 하나씩 빛납니다<br>900시간의 여정을 시작해보세요</div>
+    <input class="welcome-input" id="welcomeName" type="text" placeholder="이름을 입력하세요">
+    <button class="btn btn-gold welcome-btn" onclick="completeWelcome()">시작하기 ✦</button>
+    <button class="welcome-skip" onclick="completeWelcome()">건너뛰기</button>
+  </div>
+
+  <!-- Views -->
+  <div class="views">
+    <!-- SKY VIEW -->
+    <div class="view active" id="viewSky">
+      <div class="sky-container" id="skyContainer">
+        <div class="sky-stars" id="skyStars"></div>
+        <div class="milky-way" id="milkyWay"></div>
+        <svg class="sky-svg" id="skySvg" viewBox="0 0 100 80" preserveAspectRatio="xMidYMid slice">
+          <defs>
+            <filter id="starGlow"><feGaussianBlur stdDeviation="0.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+        </svg>
+        <div class="sky-horizon"></div>
+        <div class="sky-mountain"><svg viewBox="0 0 400 40" preserveAspectRatio="none"><path d="M0,40 L0,28 L30,18 L55,24 L80,10 L110,22 L140,6 L170,16 L195,12 L220,20 L250,8 L280,18 L300,14 L330,22 L360,16 L390,20 L400,18 L400,40Z" fill="#101022"/></svg></div>
+        <div class="sky-info">
+          <div class="sky-progress-text" id="skyHours">0<small>h</small></div>
+          <div class="sky-sub" id="skySub">900시간의 여정을 시작하세요</div>
+        </div>
+        <div class="today-badge" id="todayBadge">오늘 <span class="tb-time" id="todayTime">0m</span></div>
+        <div class="dday-badge" id="ddayBadge" style="display:none"></div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <div class="progress-labels"><span id="progressPct">0%</span><span>900h</span></div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-item glass-sm"><div class="stat-value" id="statRemain">900h</div><div class="stat-label">남은 시간</div></div>
+        <div class="stat-item glass-sm"><div class="stat-value" id="statStreak">0일</div><div class="stat-label">연속 학습</div></div>
+        <div class="stat-item glass-sm"><div class="stat-value" id="statConst">0/9</div><div class="stat-label">별자리</div></div>
+      </div>
+      <div class="daily-goal glass-sm" id="dailyGoalBox" style="display:none">
+        <div class="daily-goal-ring"><svg viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="15.5"/><circle class="ring-fill" id="dgRing" cx="18" cy="18" r="15.5" stroke-dasharray="97.4" stroke-dashoffset="97.4"/></svg></div>
+        <div class="daily-goal-info"><div class="dg-title">오늘 목표</div><div class="dg-value" id="dgValue">0m <span>/ 0m</span></div></div>
+      </div>
+      <div class="quote-box glass-sm card" id="quoteBox">
+        <div class="quote-jp">千里の道も一歩から</div>
+        <div class="quote-ko">천리길도 한 걸음부터</div>
+      </div>
+    </div>
+
+    <!-- TIMER VIEW -->
+    <div class="view" id="viewTimer">
+      <div class="timer-section">
+        <div class="timer-display" id="timerDisplay">00:00:00</div>
+        <div class="timer-btns">
+          <button class="timer-btn danger" id="btnTimerReset" onclick="resetTimer()" disabled>↺</button>
+          <button class="timer-btn primary" id="btnTimerMain" onclick="toggleTimer()">▶</button>
+          <button class="timer-btn success" id="btnTimerSave" onclick="saveTimerLog()" disabled>✓</button>
+        </div>
+        <div class="manual-section glass card">
+          <div class="section-title">✎ 수동 입력</div>
+          <div class="input-row">
+            <div class="input-group">
+              <label>날짜</label>
+              <input class="input-field" type="date" id="manualDate">
+            </div>
+            <div class="input-group" style="max-width:70px">
+              <label>시간</label>
+              <input class="input-field" type="number" id="manualHours" min="0" max="24" placeholder="0" style="text-align:center">
+            </div>
+            <div class="input-group" style="max-width:70px">
+              <label>분</label>
+              <input class="input-field" type="number" id="manualMins" min="0" max="59" placeholder="0" style="text-align:center">
+            </div>
+          </div>
+          <input class="input-field" type="text" id="manualNote" placeholder="메모 (선택)" style="margin-bottom:10px">
+          <button class="btn btn-primary btn-block" onclick="saveManualLog()">기록 저장</button>
+        </div>
+        <div class="log-list" id="logList">
+          <div class="section-title">📋 최근 기록</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CALENDAR VIEW -->
+    <div class="view" id="viewCalendar">
+      <div class="cal-header">
+        <div class="cal-title" id="calTitle"></div>
+        <div class="cal-nav">
+          <button onclick="changeMonth(-1)">◂</button>
+          <button onclick="changeMonth(0)">●</button>
+          <button onclick="changeMonth(1)">▸</button>
+        </div>
+      </div>
+      <div class="cal-weekdays">
+        <div class="cal-weekday">일</div><div class="cal-weekday">월</div><div class="cal-weekday">화</div><div class="cal-weekday">수</div><div class="cal-weekday">목</div><div class="cal-weekday">금</div><div class="cal-weekday">토</div>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-summary glass card" id="calSummary"></div>
+      <div class="trend-section glass card">
+        <div class="trend-header">
+          <div class="section-title" style="font-size:13px">📊 학습 트렌드</div>
+          <div class="trend-tabs">
+            <button class="trend-tab active" id="trendTab7" onclick="renderTrend(7)">7일</button>
+            <button class="trend-tab" id="trendTab30" onclick="renderTrend(30)">30일</button>
+          </div>
+        </div>
+        <div style="position:relative">
+          <div class="trend-chart" id="trendChart"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TEXTBOOK VIEW -->
+    <div class="view" id="viewBooks">
+      <div class="textbook-section">
+        <div class="section-title" style="margin-bottom:16px;font-size:17px;font-weight:700">📚 교재 목록</div>
+        <div id="bookList"></div>
+        <div class="add-textbook glass-sm">
+          <div class="add-row">
+            <input class="input-field" type="text" id="newBookName" placeholder="교재 이름" style="padding:10px">
+            <input class="input-field pages-input" type="number" id="newBookPages" placeholder="페이지" min="1" style="padding:10px">
+          </div>
+          <button class="btn btn-primary btn-block" onclick="addTextbook()">교재 추가</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS VIEW -->
+    <div class="view" id="viewSettings">
+      <div class="settings-section">
+        <div class="setting-group">
+          <div class="setting-group-title">프로필</div>
+          <div class="setting-item glass-sm" onclick="editSetting('name')">
+            <span class="setting-label">이름</span>
+            <span class="setting-value" id="settingName">-</span>
+          </div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-group-title">목표</div>
+          <div class="setting-item glass-sm" onclick="editSetting('target')">
+            <span class="setting-label">목표 시간</span>
+            <span class="setting-value" id="settingTarget">900h</span>
+          </div>
+          <div class="setting-item glass-sm" onclick="editSetting('dday')">
+            <span class="setting-label">D-Day</span>
+            <span class="setting-value" id="settingDday">미설정</span>
+          </div>
+          <div class="setting-item glass-sm" onclick="editSetting('dailyGoal')">
+            <span class="setting-label">일일 목표</span>
+            <span class="setting-value" id="settingDailyGoal">미설정</span>
+          </div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-group-title">데이터</div>
+          <div id="backupBannerSettings"></div>
+          <div class="setting-item glass-sm" onclick="exportData()">
+            <span class="setting-label">데이터 내보내기</span>
+            <span class="setting-value">JSON ▸</span>
+          </div>
+          <div class="setting-item glass-sm" onclick="document.getElementById('importFile').click()">
+            <span class="setting-label">데이터 가져오기</span>
+            <span class="setting-value">JSON ▸</span>
+          </div>
+          <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+          <div class="setting-item glass-sm" onclick="resetAllData()">
+            <span class="setting-label" style="color:var(--red)">모든 데이터 초기화</span>
+            <span class="setting-value" style="color:var(--red)">▸</span>
+          </div>
+        </div>
+        <div style="text-align:center;padding:20px 0 8px;font-size:11px;color:var(--text-faint)">
+          星座づくり v1.0
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="nav">
+    <button class="nav-btn active" data-view="viewSky" onclick="switchView('viewSky')"><span class="icon">✦</span>하늘</button>
+    <button class="nav-btn" data-view="viewTimer" onclick="switchView('viewTimer')"><span class="icon">⏱</span>기록</button>
+    <button class="nav-btn" data-view="viewCalendar" onclick="switchView('viewCalendar')"><span class="icon">📅</span>달력</button>
+    <button class="nav-btn" data-view="viewBooks" onclick="switchView('viewBooks')"><span class="icon">📚</span>교재</button>
+    <button class="nav-btn" data-view="viewSettings" onclick="switchView('viewSettings')"><span class="icon">⚙</span>설정</button>
+  </nav>
+</div>
+
+<!-- Day Detail Modal -->
+<div class="modal-overlay" id="dayModal" onclick="closeDayModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="dayModalTitle"></div>
+      <button class="modal-close" onclick="closeDayModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="dayStudyInfo" style="margin-bottom:16px"></div>
+      <div class="section-title">📝 일기</div>
+      <textarea class="diary-textarea" id="diaryText" placeholder="오늘의 공부는 어땠나요?"></textarea>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <label class="photo-btn" for="diaryPhoto">📷 사진 추가</label>
+        <input type="file" id="diaryPhoto" accept="image/*" style="display:none" onchange="handleDiaryPhoto(event)">
+      </div>
+      <div class="photo-preview" id="diaryPhotoPreview" style="display:none">
+        <img id="diaryPhotoImg">
+        <button class="photo-remove" onclick="removeDiaryPhoto()">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-primary btn-block" onclick="saveDiary()">저장</button>
+        <button class="btn btn-danger" onclick="deleteDiary()" id="btnDeleteDiary" style="display:none">삭제</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Setting Modal -->
+<div class="modal-overlay" id="editModal" onclick="closeEditModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="editModalTitle">설정</div>
+      <button class="modal-close" onclick="closeEditModal()">✕</button>
+    </div>
+    <div class="modal-body" id="editModalBody"></div>
+  </div>
+</div>
+
+<!-- Timer Save Modal -->
+<div class="timer-save-modal" id="timerSaveModal">
+  <div class="timer-save-content">
+    <div class="timer-save-time" id="timerSaveTime"></div>
+    <textarea class="timer-save-memo" id="timerSaveMemo" placeholder="메모를 남기시겠어요? (선택)" maxlength="200"></textarea>
+    <div class="timer-save-btns">
+      <button class="btn btn-outline" style="flex:1" onclick="closeTimerSave()">취소</button>
+      <button class="btn btn-primary" style="flex:1" onclick="confirmTimerSave()">기록 저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Constellation Info Popup -->
+<div class="const-info" id="constInfo" onclick="this.classList.remove('show')">
+  <div class="ci-name" id="ciName"></div>
+  <div class="ci-ko" id="ciKo"></div>
+  <div class="ci-hours" id="ciHours"></div>
+  <div class="ci-status" id="ciStatus"></div>
+</div>
+
+<!-- Constellation Unlock Toast -->
+<div class="unlock-toast" id="unlockToast">
+  <div class="emoji">⭐</div>
+  <div class="title" id="unlockTitle"></div>
+  <div class="desc" id="unlockDesc"></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== Constants =====
+const STORAGE_KEY = 'hoshimichi_v1';
+
+const CONSTELLATIONS = [
+  {id:'hokuto',name:'北斗七星',ko:'북두칠성',hours:100,
+   stars:[{x:15,y:22},{x:20,y:17},{x:26,y:14},{x:32,y:17},{x:35,y:23},{x:33,y:29},{x:28,y:31}],
+   lines:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,3]],lx:25,ly:10},
+  {id:'orion',name:'オリオン座',ko:'오리온자리',hours:200,
+   stars:[{x:78,y:12},{x:85,y:10},{x:79,y:24},{x:82,y:24},{x:85,y:24},{x:76,y:36},{x:87,y:34}],
+   lines:[[0,2],[1,4],[2,3],[3,4],[2,5],[4,6]],lx:82,ly:6},
+  {id:'cassiopeia',name:'カシオペヤ座',ko:'카시오페이아',hours:300,
+   stars:[{x:60,y:8},{x:65,y:4},{x:71,y:7},{x:76,y:3},{x:80,y:7}],
+   lines:[[0,1],[1,2],[2,3],[3,4]],lx:70,ly:14},
+  {id:'lyra',name:'こと座',ko:'거문고자리',hours:400,
+   stars:[{x:48,y:8},{x:45,y:14},{x:51,y:14},{x:44,y:20},{x:52,y:20}],
+   lines:[[0,1],[0,2],[1,3],[2,4],[3,4]],lx:48,ly:24},
+  {id:'scorpius',name:'さそり座',ko:'전갈자리',hours:500,
+   stars:[{x:68,y:48},{x:72,y:53},{x:76,y:57},{x:80,y:60},{x:84,y:58},{x:87,y:54},{x:90,y:57}],
+   lines:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]],lx:78,ly:45},
+  {id:'cygnus',name:'はくちょう座',ko:'백조자리',hours:600,
+   stars:[{x:42,y:35},{x:37,y:42},{x:47,y:42},{x:42,y:50},{x:42,y:28}],
+   lines:[[0,1],[0,2],[0,3],[0,4]],lx:42,ly:54},
+  {id:'gemini',name:'ふたご座',ko:'쌍둥이자리',hours:700,
+   stars:[{x:14,y:44},{x:18,y:38},{x:10,y:50},{x:16,y:54},{x:22,y:46},{x:25,y:40}],
+   lines:[[0,1],[0,2],[2,3],[1,4],[4,5]],lx:17,ly:34},
+  {id:'subaru',name:'すばる',ko:'좀생이(플레이아데스)',hours:800,
+   stars:[{x:36,y:56},{x:38,y:53},{x:40,y:56},{x:37,y:59},{x:39,y:61},{x:41,y:58},{x:39,y:55}],
+   lines:[],lx:38,ly:50},
+  {id:'amanogawa',name:'天の川',ko:'은하수',hours:900,stars:[],lines:[],lx:50,ly:40}
+];
+
+const QUOTES = [
+  {jp:'千里の道も一歩から',ko:'천리길도 한 걸음부터'},
+  {jp:'継続は力なり',ko:'계속하는 것이 힘이다'},
+  {jp:'七転び八起き',ko:'일곱 번 넘어져도 여덟 번 일어나'},
+  {jp:'石の上にも三年',ko:'돌 위에도 3년'},
+  {jp:'塵も積もれば山となる',ko:'티끌 모아 태산'},
+  {jp:'雨降って地固まる',ko:'비 온 뒤에 땅이 굳어진다'},
+  {jp:'明日は明日の風が吹く',ko:'내일은 내일의 바람이 분다'},
+  {jp:'初心忘るべからず',ko:'초심을 잊지 말라'},
+  {jp:'一期一会',ko:'일생에 한 번의 만남'},
+  {jp:'花鳥風月',ko:'자연의 아름다움'},
+  {jp:'一所懸命',ko:'한 곳에 목숨을 걸다'},
+  {jp:'虹は嵐の後に来る',ko:'무지개는 폭풍 뒤에 온다'}
+];
+
+// ===== Data Management =====
+function defaultData(){
+  return {
+    version:1,userName:'',targetHours:900,
+    dday:null,dailyGoal:0,
+    studyLogs:[],textbooks:[],diaryEntries:[],
+    lastUnlockedCount:0
+  };
+}
+let data = defaultData();
+
+function loadData(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) data = {...defaultData(),...JSON.parse(raw)};
+  }catch(e){data = defaultData();}
+}
+function saveData(){
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){showToast('저장 공간이 부족합니다');}
+}
+function getTotalMinutes(){
+  return data.studyLogs.reduce((s,l)=>s+l.minutes,0);
+}
+function getTotalHours(){return getTotalMinutes()/60;}
+function getProgress(){return Math.min(1,getTotalHours()/data.targetHours);}
+function getUnlockedCount(){
+  const h = getTotalHours();
+  let c = 0;
+  for(const con of CONSTELLATIONS){if(h>=con.hours) c++;}
+  return c;
+}
+function getStreak(){
+  const dates = [...new Set(data.studyLogs.map(l=>l.date))].sort().reverse();
+  if(!dates.length) return 0;
+  const today = todayStr();
+  const yesterday = dateStr(new Date(Date.now()-86400000));
+  if(dates[0]!==today && dates[0]!==yesterday) return 0;
+  let streak = 1;
+  for(let i=1;i<dates.length;i++){
+    const d1 = new Date(dates[i-1]);
+    const d2 = new Date(dates[i]);
+    const diff = (d1-d2)/(86400000);
+    if(Math.round(diff)===1) streak++;
+    else break;
+  }
+  return streak;
+}
+function todayStr(){return dateStr(new Date());}
+function dateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+// ===== Star Sky Rendering =====
+let starsGenerated = false;
+
+function generateBackgroundStars(){
+  if(starsGenerated) return;
+  starsGenerated = true;
+  const container = document.getElementById('skyStars');
+  const count = 200;
+  let html = '';
+  for(let i=0;i<count;i++){
+    const x = Math.random()*100;
+    const y = Math.random()*100;
+    const size = .5 + Math.random()*2;
+    const opacity = .2 + Math.random()*.6;
+    const dur = 2 + Math.random()*4;
+    const delay = Math.random()*5;
+    const type = Math.random()>.85?'warm':Math.random()>.7?'blue':'';
+    html+=`<div class="sky-star ${type}" style="left:${x}%;top:${y}%;width:${size}px;height:${size}px;--o:${opacity};animation:twinkle ${dur}s ${delay}s infinite ease-in-out"></div>`;
+  }
+  container.innerHTML = html;
+}
+
+function renderConstellations(){
+  const svg = document.getElementById('skySvg');
+  const existing = svg.querySelectorAll('.constellation');
+  existing.forEach(e=>e.remove());
+  const unlocked = getUnlockedCount();
+
+  CONSTELLATIONS.forEach((con,idx)=>{
+    if(idx===8) return; // Milky Way handled separately
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.classList.add('constellation');
+    g.id = 'const-'+con.id;
+    if(idx<unlocked) g.classList.add('unlocked');
+
+    con.lines.forEach(([a,b])=>{
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',con.stars[a].x);
+      line.setAttribute('y1',con.stars[a].y);
+      line.setAttribute('x2',con.stars[b].x);
+      line.setAttribute('y2',con.stars[b].y);
+      line.classList.add('const-line');
+      g.appendChild(line);
+    });
+
+    con.stars.forEach(s=>{
+      const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx',s.x);
+      c.setAttribute('cy',s.y);
+      c.setAttribute('r',.8);
+      c.classList.add('const-star');
+      g.appendChild(c);
+    });
+
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',con.lx);
+    t.setAttribute('y',con.ly);
+    t.classList.add('const-label');
+    t.textContent = con.name;
+    g.appendChild(t);
+
+    g.style.cursor = 'pointer';
+    g.addEventListener('click',()=>showConstInfo(idx));
+    svg.appendChild(g);
+  });
+}
+
+function updateSky(){
+  const hours = getTotalHours();
+  const progress = getProgress();
+  const unlocked = getUnlockedCount();
+
+  document.getElementById('skyHours').innerHTML = Math.floor(hours)+'<small>h</small> '+Math.round((hours%1)*60)+'<small>m</small>';
+
+  const remain = Math.max(0,data.targetHours-hours);
+  if(hours===0) document.getElementById('skySub').textContent='별을 밝힐 시간이에요';
+  else if(progress>=1) document.getElementById('skySub').textContent='🎉 축하합니다! 모든 별자리가 빛나고 있어요!';
+  else document.getElementById('skySub').textContent=`남은 시간: ${Math.floor(remain)}h ${Math.round((remain%1)*60)}m`;
+
+  document.getElementById('progressFill').style.width = (progress*100)+'%';
+  document.getElementById('progressPct').textContent = Math.floor(progress*100)+'%';
+  document.getElementById('statRemain').textContent = Math.floor(remain)+'h';
+  document.getElementById('statStreak').textContent = getStreak()+'일';
+  document.getElementById('statConst').textContent = unlocked+'/9';
+
+  // Update constellation visibility
+  CONSTELLATIONS.forEach((con,idx)=>{
+    if(idx===8) return;
+    const el = document.getElementById('const-'+con.id);
+    if(el){
+      if(idx<unlocked) el.classList.add('unlocked');
+      else el.classList.remove('unlocked');
+    }
+  });
+
+  // Milky Way
+  const mw = document.getElementById('milkyWay');
+  if(unlocked>=9) mw.classList.add('visible');
+  else mw.classList.remove('visible');
+
+  // Check for new constellation unlock
+  if(unlocked>data.lastUnlockedCount && data.lastUnlockedCount>=0){
+    const newCon = CONSTELLATIONS[unlocked-1];
+    if(newCon && data.lastUnlockedCount>0){
+      showUnlockToast(newCon);
+    }
+    data.lastUnlockedCount = unlocked;
+    saveData();
+  }
+
+  updateDDay();
+  updateQuote();
+  updateTodayBadge();
+  updateDailyGoal();
+}
+
+function showUnlockToast(con){
+  const toast = document.getElementById('unlockToast');
+  document.getElementById('unlockTitle').textContent = con.name;
+  document.getElementById('unlockDesc').textContent = con.ko+' 별자리가 밤하늘에 떠올랐습니다!';
+  toast.classList.add('show');
+  setTimeout(()=>toast.classList.remove('show'),3500);
+}
+
+function showConstInfo(idx){
+  const con = CONSTELLATIONS[idx];
+  const unlocked = getUnlockedCount();
+  const info = document.getElementById('constInfo');
+  document.getElementById('ciName').textContent = con.name;
+  document.getElementById('ciKo').textContent = con.ko;
+  document.getElementById('ciHours').textContent = con.hours+'시간 달성 시 해금';
+  if(idx<unlocked){
+    document.getElementById('ciStatus').innerHTML = '<span style="color:var(--gold)">해금됨</span>';
+  } else {
+    const h = getTotalHours();
+    const remain = Math.max(0,con.hours-h);
+    document.getElementById('ciStatus').innerHTML = `<span style="color:var(--text-faint)">${Math.ceil(remain)}시간 남음</span>`;
+  }
+  info.classList.add('show');
+  setTimeout(()=>info.classList.remove('show'),3000);
+}
+
+function updateTodayBadge(){
+  const today = todayStr();
+  const todayMins = data.studyLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.minutes,0);
+  const h = Math.floor(todayMins/60), m = todayMins%60;
+  const el = document.getElementById('todayTime');
+  if(h>0) el.textContent = h+'h '+m+'m';
+  else el.textContent = m+'m';
+}
+
+function updateDailyGoal(){
+  const box = document.getElementById('dailyGoalBox');
+  if(!data.dailyGoal || data.dailyGoal<=0){box.style.display='none';return;}
+  box.style.display='flex';
+  const today = todayStr();
+  const todayMins = data.studyLogs.filter(l=>l.date===today).reduce((s,l)=>s+l.minutes,0);
+  const goal = data.dailyGoal;
+  const pct = Math.min(1,todayMins/goal);
+  const circ = 97.4;
+  document.getElementById('dgRing').style.strokeDashoffset = circ*(1-pct);
+  if(pct>=1) document.getElementById('dgRing').style.stroke = 'var(--gold)';
+  else document.getElementById('dgRing').style.stroke = 'var(--purple)';
+  const h = Math.floor(todayMins/60), m = todayMins%60;
+  const gh = Math.floor(goal/60), gm = goal%60;
+  const tStr = h>0?h+'h '+m+'m':m+'m';
+  const gStr = gh>0?gh+'h'+(gm>0?' '+gm+'m':''):gm+'m';
+  document.getElementById('dgValue').innerHTML = tStr+' <span>/ '+gStr+'</span>';
+}
+
+function renderTrend(days){
+  document.getElementById('trendTab7').classList.toggle('active',days===7);
+  document.getElementById('trendTab30').classList.toggle('active',days===30);
+  const chart = document.getElementById('trendChart');
+  const today = new Date();
+  const bars = [];
+  let maxMins = 1;
+  for(let i=days-1;i>=0;i--){
+    const d = new Date(today);
+    d.setDate(d.getDate()-i);
+    const ds = dateStr(d);
+    const mins = data.studyLogs.filter(l=>l.date===ds).reduce((s,l)=>s+l.minutes,0);
+    if(mins>maxMins) maxMins = mins;
+    bars.push({date:d,ds:ds,mins:mins});
+  }
+  let html='';
+  bars.forEach(b=>{
+    const h = Math.round(b.mins/maxMins*80);
+    const label = days<=7?(b.date.getMonth()+1)+'/'+(b.date.getDate()):b.date.getDate()+'';
+    const timeStr = b.mins>0?(b.mins>=60?Math.floor(b.mins/60)+'h':b.mins+'m'):'';
+    html+=`<div class="trend-bar-wrap">
+      ${timeStr?`<div class="trend-value">${timeStr}</div>`:''}
+      <div class="trend-bar ${b.mins===0?'zero':''}" style="height:${b.mins===0?2:h}px"></div>
+      <div class="trend-label">${label}</div>
+    </div>`;
+  });
+  chart.innerHTML = html;
+}
+
+function updateQuote(){
+  const idx = Math.floor(Date.now()/86400000)%QUOTES.length;
+  const q = QUOTES[idx];
+  const box = document.getElementById('quoteBox');
+  box.querySelector('.quote-jp').textContent = q.jp;
+  box.querySelector('.quote-ko').textContent = q.ko;
+}
+
+function triggerShootingStar(){
+  const sky = document.getElementById('skyContainer');
+  const star = document.createElement('div');
+  star.className = 'shooting-star';
+  star.style.left = (10+Math.random()*60)+'%';
+  star.style.top = (5+Math.random()*30)+'%';
+  star.style.animation = 'shoot .8s ease-out forwards';
+  sky.appendChild(star);
+  setTimeout(()=>star.remove(),1000);
+}
+
+// ===== Timer =====
+let timerState = 'stopped'; // stopped, running, paused
+let timerStart = 0;
+let timerElapsed = 0;
+let timerInterval = null;
+
+function toggleTimer(){
+  if(timerState==='stopped'||timerState==='paused') startTimer();
+  else pauseTimer();
+}
+function startTimer(){
+  timerStart = Date.now()-timerElapsed;
+  timerState = 'running';
+  timerInterval = setInterval(updateTimerDisplay,100);
+  updateTimerButtons();
+  localStorage.setItem(STORAGE_KEY+'_timer',JSON.stringify({start:timerStart,state:'running'}));
+}
+function pauseTimer(){
+  timerElapsed = Date.now()-timerStart;
+  timerState = 'paused';
+  clearInterval(timerInterval);
+  updateTimerButtons();
+  localStorage.setItem(STORAGE_KEY+'_timer',JSON.stringify({elapsed:timerElapsed,state:'paused'}));
+}
+function resetTimer(){
+  timerState = 'stopped';
+  timerElapsed = 0;
+  clearInterval(timerInterval);
+  document.getElementById('timerDisplay').textContent = '00:00:00';
+  document.getElementById('timerDisplay').classList.remove('running');
+  updateTimerButtons();
+  localStorage.removeItem(STORAGE_KEY+'_timer');
+}
+function saveTimerLog(){
+  const mins = Math.floor(timerElapsed/60000);
+  if(mins<1){showToast('1분 이상 공부해야 기록됩니다');return;}
+  const h = Math.floor(mins/60), m = mins%60;
+  document.getElementById('timerSaveTime').textContent = (h>0?h+'시간 ':'') + m+'분';
+  document.getElementById('timerSaveMemo').value = '';
+  document.getElementById('timerSaveModal').classList.add('show');
+}
+function confirmTimerSave(){
+  const mins = Math.floor(timerElapsed/60000);
+  const note = document.getElementById('timerSaveMemo').value.trim();
+  data.studyLogs.push({id:genId(),date:todayStr(),minutes:mins,method:'stopwatch',note:note});
+  saveData();
+  closeTimerSave();
+  resetTimer();
+  updateAll();
+  showToast(`${Math.floor(mins/60)}시간 ${mins%60}분 기록됨 ✦`);
+}
+function closeTimerSave(){
+  document.getElementById('timerSaveModal').classList.remove('show');
+}
+function updateTimerDisplay(){
+  const elapsed = Date.now()-timerStart;
+  timerElapsed = elapsed;
+  const s = Math.floor(elapsed/1000);
+  const h = Math.floor(s/3600);
+  const m = Math.floor((s%3600)/60);
+  const sec = s%60;
+  const display = document.getElementById('timerDisplay');
+  display.textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+  display.classList.add('running');
+}
+function updateTimerButtons(){
+  const main = document.getElementById('btnTimerMain');
+  const reset = document.getElementById('btnTimerReset');
+  const save = document.getElementById('btnTimerSave');
+  if(timerState==='running'){
+    main.textContent = '⏸';
+    reset.disabled = true;
+    save.disabled = true;
+  } else if(timerState==='paused'){
+    main.textContent = '▶';
+    reset.disabled = false;
+    save.disabled = false;
+  } else {
+    main.textContent = '▶';
+    reset.disabled = true;
+    save.disabled = true;
+    document.getElementById('timerDisplay').classList.remove('running');
+  }
+}
+function restoreTimer(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY+'_timer');
+    if(!raw) return;
+    const t = JSON.parse(raw);
+    if(t.state==='running'){
+      timerStart = t.start;
+      timerElapsed = Date.now()-timerStart;
+      timerState = 'running';
+      timerInterval = setInterval(updateTimerDisplay,100);
+      updateTimerButtons();
+    } else if(t.state==='paused'){
+      timerElapsed = t.elapsed;
+      timerState = 'paused';
+      const s = Math.floor(timerElapsed/1000);
+      const h = Math.floor(s/3600);
+      const m = Math.floor((s%3600)/60);
+      const sec = s%60;
+      document.getElementById('timerDisplay').textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+      updateTimerButtons();
+    }
+  }catch(e){}
+}
+
+// ===== Manual Log =====
+function saveManualLog(){
+  const date = document.getElementById('manualDate').value;
+  const h = parseInt(document.getElementById('manualHours').value)||0;
+  const m = parseInt(document.getElementById('manualMins').value)||0;
+  const note = document.getElementById('manualNote').value.trim();
+  const mins = h*60+m;
+  if(!date){showToast('날짜를 선택하세요');return;}
+  if(mins<1){showToast('시간을 입력하세요');return;}
+  data.studyLogs.push({id:genId(),date:date,minutes:mins,method:'manual',note:note});
+  saveData();
+  document.getElementById('manualHours').value='';
+  document.getElementById('manualMins').value='';
+  document.getElementById('manualNote').value='';
+  updateAll();
+  showToast(`${h}시간 ${m}분 기록됨 ✦`);
+}
+
+function renderLogs(){
+  const container = document.getElementById('logList');
+  const sorted = [...data.studyLogs].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  const recent = sorted.slice(0,10);
+  let html = '<div class="section-title">📋 최근 기록</div>';
+  if(!recent.length){
+    html += '<div style="text-align:center;padding:24px;color:var(--text-faint)">아직 기록이 없어요<br>공부를 시작해보세요!</div>';
+  }
+  recent.forEach(log=>{
+    const h = Math.floor(log.minutes/60);
+    const m = log.minutes%60;
+    const timeStr = h>0?h+'h '+m+'m':m+'m';
+    const d = new Date(log.date);
+    const dateLabel = (d.getMonth()+1)+'/'+(d.getDate())+'('+['일','월','화','수','목','금','토'][d.getDay()]+')';
+    html+=`<div class="log-item glass-sm">
+      <div class="log-dot ${log.method==='stopwatch'?'sw':'manual'}"></div>
+      <div class="log-info">
+        <div class="log-date">${dateLabel} · ${log.method==='stopwatch'?'⏱ 스톱워치':'✎ 수동'}</div>
+        <div class="log-time">${timeStr}</div>
+        ${log.note?`<div class="log-note">${escHtml(log.note)}</div>`:''}
+      </div>
+      <button class="log-delete" onclick="deleteLog('${log.id}')" title="삭제">✕</button>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+function deleteLog(id){
+  if(!confirm('이 기록을 삭제할까요?')) return;
+  data.studyLogs = data.studyLogs.filter(l=>l.id!==id);
+  saveData();
+  updateAll();
+  showToast('기록 삭제됨');
+}
+
+// ===== Calendar =====
+let calYear, calMonth;
+
+function initCalendar(){
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth();
+  renderCalendar();
+}
+function changeMonth(delta){
+  if(delta===0){
+    const now = new Date();
+    calYear = now.getFullYear();
+    calMonth = now.getMonth();
+  } else {
+    calMonth += delta;
+    if(calMonth<0){calMonth=11;calYear--;}
+    if(calMonth>11){calMonth=0;calYear++;}
+  }
+  renderCalendar();
+}
+function renderCalendar(){
+  document.getElementById('calTitle').textContent = calYear+'년 '+(calMonth+1)+'월';
+  const grid = document.getElementById('calGrid');
+  const first = new Date(calYear,calMonth,1);
+  const last = new Date(calYear,calMonth+1,0);
+  const startDay = first.getDay();
+  const daysInMonth = last.getDate();
+  const today = todayStr();
+
+  // Study data for this month
+  const monthLogs = {};
+  data.studyLogs.forEach(l=>{
+    if(!monthLogs[l.date]) monthLogs[l.date]=0;
+    monthLogs[l.date]+=l.minutes;
+  });
+  const diaryDates = new Set(data.diaryEntries.map(d=>d.date));
+
+  let html = '';
+  // Previous month fill
+  const prevLast = new Date(calYear,calMonth,0).getDate();
+  for(let i=startDay-1;i>=0;i--){
+    html+=`<div class="cal-day other-month">${prevLast-i}</div>`;
+  }
+  // Current month
+  for(let d=1;d<=daysInMonth;d++){
+    const ds = calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const isToday = ds===today;
+    const hasStudy = monthLogs[ds]>0;
+    const hasDiary = diaryDates.has(ds);
+    const cls = ['cal-day'];
+    if(isToday) cls.push('today');
+    if(hasStudy) cls.push('has-study');
+    if(hasDiary) cls.push('has-diary');
+    html+=`<div class="${cls.join(' ')}" onclick="openDayDetail('${ds}')">${d}</div>`;
+  }
+  // Next month fill
+  const total = startDay+daysInMonth;
+  const remaining = (7-total%7)%7;
+  for(let i=1;i<=remaining;i++){
+    html+=`<div class="cal-day other-month">${i}</div>`;
+  }
+  grid.innerHTML = html;
+
+  // Monthly summary
+  const totalMins = Object.values(monthLogs).reduce((s,v)=>s+v,0);
+  const studyDays = Object.keys(monthLogs).filter(k=>{
+    const d = new Date(k);
+    return d.getFullYear()===calYear && d.getMonth()===calMonth;
+  }).length;
+  const summary = document.getElementById('calSummary');
+  summary.innerHTML = `<div style="display:flex;justify-content:space-around;text-align:center">
+    <div><div style="font-size:18px;font-weight:700;color:var(--purple)">${Math.floor(totalMins/60)}h ${totalMins%60}m</div><div style="font-size:11px;color:var(--text-faint)">이번 달 공부</div></div>
+    <div><div style="font-size:18px;font-weight:700;color:var(--gold)">${studyDays}일</div><div style="font-size:11px;color:var(--text-faint)">학습 일수</div></div>
+  </div>`;
+  renderTrend(document.getElementById('trendTab30').classList.contains('active')?30:7);
+}
+
+// ===== Day Detail / Diary =====
+let currentDayDate = '';
+let currentDiaryPhoto = '';
+
+function openDayDetail(dateStr){
+  currentDayDate = dateStr;
+  const d = new Date(dateStr);
+  document.getElementById('dayModalTitle').textContent = (d.getMonth()+1)+'월 '+d.getDate()+'일 ('+['일','월','화','수','목','금','토'][d.getDay()]+')';
+
+  // Study info
+  const dayLogs = data.studyLogs.filter(l=>l.date===dateStr);
+  const totalMins = dayLogs.reduce((s,l)=>s+l.minutes,0);
+  let studyHtml = '';
+  if(dayLogs.length){
+    studyHtml = `<div class="glass-sm" style="padding:12px;margin-bottom:4px">
+      <div style="font-size:13px;color:var(--text-dim)">공부 시간</div>
+      <div style="font-size:22px;font-weight:700;color:var(--purple)">${Math.floor(totalMins/60)}h ${totalMins%60}m</div>
+    </div>`;
+    dayLogs.forEach(l=>{
+      const h=Math.floor(l.minutes/60),m=l.minutes%60;
+      studyHtml+=`<div style="font-size:12px;color:var(--text-faint);padding:4px 0">${l.method==='stopwatch'?'⏱':'✎'} ${h>0?h+'h ':''}${m}m${l.note?' · '+escHtml(l.note):''}</div>`;
+    });
+  } else {
+    studyHtml = '<div style="font-size:13px;color:var(--text-faint);padding:8px 0">이 날의 공부 기록이 없습니다</div>';
+  }
+  document.getElementById('dayStudyInfo').innerHTML = studyHtml;
+
+  // Diary
+  const diary = data.diaryEntries.find(e=>e.date===dateStr);
+  document.getElementById('diaryText').value = diary?diary.text:'';
+  currentDiaryPhoto = diary?diary.photo||'':'';
+  if(currentDiaryPhoto){
+    document.getElementById('diaryPhotoPreview').style.display='block';
+    document.getElementById('diaryPhotoImg').src=currentDiaryPhoto;
+  } else {
+    document.getElementById('diaryPhotoPreview').style.display='none';
+  }
+  document.getElementById('btnDeleteDiary').style.display = diary?'block':'none';
+
+  showModal('dayModal');
+}
+function saveDiary(){
+  const text = document.getElementById('diaryText').value.trim();
+  const photo = currentDiaryPhoto;
+  if(!text && !photo){showToast('내용을 입력하세요');return;}
+
+  const existing = data.diaryEntries.findIndex(e=>e.date===currentDayDate);
+  const entry = {id:genId(),date:currentDayDate,text:text,photo:photo};
+  if(existing>=0) data.diaryEntries[existing]=entry;
+  else data.diaryEntries.push(entry);
+  saveData();
+  closeModal('dayModal');
+  renderCalendar();
+  showToast('일기 저장됨 ✦');
+}
+function deleteDiary(){
+  if(!confirm('이 일기를 삭제할까요?')) return;
+  data.diaryEntries = data.diaryEntries.filter(e=>e.date!==currentDayDate);
+  saveData();
+  closeModal('dayModal');
+  renderCalendar();
+  showToast('일기 삭제됨');
+}
+function handleDiaryPhoto(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  resizeImage(file,600,.6).then(dataUrl=>{
+    currentDiaryPhoto = dataUrl;
+    document.getElementById('diaryPhotoPreview').style.display='block';
+    document.getElementById('diaryPhotoImg').src=dataUrl;
+  });
+  e.target.value='';
+}
+function removeDiaryPhoto(){
+  currentDiaryPhoto='';
+  document.getElementById('diaryPhotoPreview').style.display='none';
+}
+function resizeImage(file,maxW,quality){
+  return new Promise(resolve=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const canvas = document.createElement('canvas');
+        let w=img.width,h=img.height;
+        if(w>maxW){h=h*maxW/w;w=maxW;}
+        canvas.width=w;canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg',quality));
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ===== Textbooks =====
+function renderTextbooks(){
+  const container = document.getElementById('bookList');
+  if(!data.textbooks.length){
+    container.innerHTML='<div style="text-align:center;padding:32px;color:var(--text-faint)">교재를 추가해보세요<br>공부 중인 책을 관리할 수 있어요</div>';
+    return;
+  }
+  let html='';
+  data.textbooks.forEach(book=>{
+    const total = book.totalPages||0;
+    const current = book.currentPage||0;
+    const pct = total>0?Math.min(100,Math.round(current/total*100)):0;
+    const isDone = book.status==='done'||pct>=100;
+    const statusCls = isDone?'done':'active';
+    html+=`<div class="textbook-card glass-sm">
+      <div class="textbook-top">
+        <div class="textbook-icon">📖</div>
+        <div class="textbook-info">
+          <div class="textbook-name">${escHtml(book.name)}</div>
+          <div class="textbook-date">${book.addedDate}${total>0?' · '+total+'p':''}</div>
+        </div>
+        <div class="textbook-actions">
+          <button onclick="editTextbook('${book.id}')" title="수정">✎</button>
+          <button onclick="deleteTextbook('${book.id}')" title="삭제">✕</button>
+        </div>
+      </div>
+      ${total>0?`<div class="book-progress">
+        <div class="book-progress-bar" onclick="focusPageInput('${book.id}')">
+          <div class="book-progress-fill ${statusCls}" style="width:${pct}%"></div>
+        </div>
+        <div class="book-progress-text">
+          <span>${current} / ${total} 페이지</span>
+          <span class="pct ${statusCls}">${pct}%</span>
+        </div>
+      </div>
+      <div class="book-page-edit">
+        <span>현재</span>
+        <input class="book-page-input" type="number" id="pageInput_${book.id}" value="${current}" min="0" max="${total}" onkeydown="if(event.key==='Enter')updatePage('${book.id}')">
+        <span>/ ${total}p</span>
+        <button onclick="updatePage('${book.id}')">저장</button>
+      </div>`:'<div style="margin-top:8px;font-size:11px;color:var(--text-faint)">페이지 수 미설정</div>'}
+    </div>`;
+  });
+  container.innerHTML=html;
+}
+function addTextbook(){
+  const nameInput = document.getElementById('newBookName');
+  const pagesInput = document.getElementById('newBookPages');
+  const name = nameInput.value.trim();
+  const pages = parseInt(pagesInput.value)||0;
+  if(!name){showToast('교재 이름을 입력하세요');return;}
+  data.textbooks.push({id:genId(),name:name,addedDate:todayStr(),status:'active',totalPages:pages,currentPage:0});
+  saveData();
+  nameInput.value='';
+  pagesInput.value='';
+  renderTextbooks();
+  showToast('교재 추가됨');
+}
+function updatePage(id){
+  const book = data.textbooks.find(b=>b.id===id);
+  if(!book) return;
+  const input = document.getElementById('pageInput_'+id);
+  const val = Math.max(0,Math.min(book.totalPages||0,parseInt(input.value)||0));
+  book.currentPage = val;
+  if(val>0 && val>=(book.totalPages||0)) book.status='done';
+  else if(book.status==='done' && val<(book.totalPages||0)) book.status='active';
+  saveData();
+  renderTextbooks();
+  showToast(val>=(book.totalPages||0)?'교재 완료! 🎉':'진행 상황 저장됨');
+}
+function focusPageInput(id){
+  const input = document.getElementById('pageInput_'+id);
+  if(input){input.focus();input.select();}
+}
+function toggleBookStatus(id){
+  const book = data.textbooks.find(b=>b.id===id);
+  if(book) book.status = book.status==='active'?'done':'active';
+  saveData();
+  renderTextbooks();
+}
+function deleteTextbook(id){
+  if(!confirm('이 교재를 삭제할까요?')) return;
+  data.textbooks = data.textbooks.filter(b=>b.id!==id);
+  saveData();
+  renderTextbooks();
+  showToast('교재 삭제됨');
+}
+function editTextbook(id){
+  const book = data.textbooks.find(b=>b.id===id);
+  if(!book) return;
+  const title = document.getElementById('editModalTitle');
+  const body = document.getElementById('editModalBody');
+  title.textContent='교재 수정';
+  body.innerHTML=`<div class="input-group" style="margin-bottom:10px">
+    <label>교재 이름</label>
+    <input class="input-field glass-sm" id="editBookName" value="${escHtml(book.name)}" style="padding:12px">
+  </div>
+  <div class="input-group" style="margin-bottom:14px">
+    <label>총 페이지 수</label>
+    <input class="input-field glass-sm" id="editBookPages" type="number" value="${book.totalPages||''}" min="0" placeholder="0" style="padding:12px">
+  </div>
+  <button class="btn btn-primary btn-block" onclick="saveTextbookEdit('${book.id}')">저장</button>`;
+  showModal('editModal');
+  setTimeout(()=>document.getElementById('editBookName').focus(),350);
+}
+function saveTextbookEdit(id){
+  const book = data.textbooks.find(b=>b.id===id);
+  if(!book) return;
+  const name = document.getElementById('editBookName').value.trim();
+  const pages = parseInt(document.getElementById('editBookPages').value)||0;
+  if(!name){showToast('교재 이름을 입력하세요');return;}
+  book.name = name;
+  book.totalPages = pages;
+  if(book.currentPage>pages && pages>0) book.currentPage = pages;
+  if(pages>0 && book.currentPage>=pages) book.status='done';
+  else if(book.status==='done' && book.currentPage<pages) book.status='active';
+  saveData();
+  closeModal('editModal');
+  renderTextbooks();
+  showToast('교재 정보 수정됨');
+}
+
+// ===== D-Day =====
+function updateDDay(){
+  const badge = document.getElementById('ddayBadge');
+  const settingEl = document.getElementById('settingDday');
+  if(!data.dday || !data.dday.date){
+    badge.style.display='none';
+    settingEl.textContent='미설정';
+    return;
+  }
+  const target = new Date(data.dday.date+'T00:00:00');
+  const now = new Date();
+  now.setHours(0,0,0,0);
+  const diff = Math.ceil((target-now)/86400000);
+  const label = data.dday.label||'D-Day';
+  if(diff>0){
+    badge.textContent=`${label} D-${diff}`;
+    badge.style.display='block';
+    settingEl.textContent=`${label} D-${diff}`;
+  } else if(diff===0){
+    badge.textContent=`${label} D-Day!`;
+    badge.style.display='block';
+    settingEl.textContent=`${label} D-Day!`;
+  } else {
+    badge.textContent=`${label} D+${Math.abs(diff)}`;
+    badge.style.display='block';
+    settingEl.textContent=`${label} D+${Math.abs(diff)}`;
+  }
+}
+
+// ===== Settings =====
+function updateSettings(){
+  document.getElementById('settingName').textContent = data.userName||'미설정';
+  document.getElementById('settingTarget').textContent = data.targetHours+'h';
+  if(data.dailyGoal>0){
+    const gh=Math.floor(data.dailyGoal/60),gm=data.dailyGoal%60;
+    document.getElementById('settingDailyGoal').textContent = (gh>0?gh+'시간 ':'')+(gm>0?gm+'분':'');
+  } else {
+    document.getElementById('settingDailyGoal').textContent = '미설정';
+  }
+  updateDDay();
+  checkBackupReminder();
+}
+function editSetting(type){
+  const modal = document.getElementById('editModal');
+  const title = document.getElementById('editModalTitle');
+  const body = document.getElementById('editModalBody');
+
+  if(type==='name'){
+    title.textContent='이름 변경';
+    body.innerHTML=`<input class="input-field glass-sm" id="editNameInput" value="${escHtml(data.userName)}" placeholder="이름 입력" style="padding:14px;margin-bottom:12px;width:100%">
+    <button class="btn btn-primary btn-block" onclick="saveSetting('name')">저장</button>`;
+    showModal('editModal');
+    setTimeout(()=>document.getElementById('editNameInput').focus(),350);
+  } else if(type==='target'){
+    title.textContent='목표 시간';
+    body.innerHTML=`<input class="input-field glass-sm" id="editTargetInput" type="number" value="${data.targetHours}" min="1" style="padding:14px;margin-bottom:12px;width:100%;text-align:center;font-size:24px">
+    <div style="font-size:12px;color:var(--text-faint);text-align:center;margin-bottom:12px">시간 단위</div>
+    <button class="btn btn-primary btn-block" onclick="saveSetting('target')">저장</button>`;
+    showModal('editModal');
+  } else if(type==='dday'){
+    title.textContent='D-Day 설정';
+    body.innerHTML=`<div class="input-group" style="margin-bottom:10px">
+      <label>목표 이름</label>
+      <input class="input-field glass-sm" id="editDdayLabel" value="${data.dday?escHtml(data.dday.label):''}" placeholder="예: JLPT N2" style="padding:12px">
+    </div>
+    <div class="input-group" style="margin-bottom:14px">
+      <label>목표 날짜</label>
+      <input class="input-field glass-sm" id="editDdayDate" type="date" value="${data.dday?data.dday.date:''}" style="padding:12px">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="saveSetting('dday')" style="margin-bottom:8px">저장</button>
+    ${data.dday?'<button class="btn btn-danger btn-block" onclick="saveSetting(\'dday-clear\')">D-Day 삭제</button>':''}`;
+    showModal('editModal');
+  } else if(type==='dailyGoal'){
+    title.textContent='일일 목표';
+    const cur = data.dailyGoal||0;
+    const curH = Math.floor(cur/60), curM = cur%60;
+    body.innerHTML=`<div style="display:flex;gap:8px;margin-bottom:8px">
+      <div class="input-group">
+        <label>시간</label>
+        <input class="input-field glass-sm" id="editDgHours" type="number" value="${curH}" min="0" max="12" style="padding:12px;text-align:center;font-size:20px">
+      </div>
+      <div class="input-group">
+        <label>분</label>
+        <input class="input-field glass-sm" id="editDgMins" type="number" value="${curM}" min="0" max="59" style="padding:12px;text-align:center;font-size:20px">
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-faint);text-align:center;margin-bottom:12px">0으로 설정하면 비활성화</div>
+    <button class="btn btn-primary btn-block" onclick="saveSetting('dailyGoal')">저장</button>`;
+    showModal('editModal');
+  }
+}
+function saveSetting(type){
+  if(type==='name'){
+    data.userName = document.getElementById('editNameInput').value.trim();
+  } else if(type==='target'){
+    const v = parseInt(document.getElementById('editTargetInput').value);
+    if(v>0) data.targetHours = v;
+  } else if(type==='dday'){
+    const label = document.getElementById('editDdayLabel').value.trim();
+    const date = document.getElementById('editDdayDate').value;
+    if(!date){showToast('날짜를 선택하세요');return;}
+    data.dday = {label:label||'D-Day',date:date};
+  } else if(type==='dday-clear'){
+    data.dday = null;
+  } else if(type==='dailyGoal'){
+    const h = parseInt(document.getElementById('editDgHours').value)||0;
+    const m = parseInt(document.getElementById('editDgMins').value)||0;
+    data.dailyGoal = h*60+m;
+  }
+  saveData();
+  closeModal('editModal');
+  updateAll();
+  showToast('설정 저장됨');
+}
+
+function exportData(){
+  const json = JSON.stringify(data,null,2);
+  const blob = new Blob([json],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'hoshimichi_backup_'+todayStr()+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  try{localStorage.setItem(STORAGE_KEY+'_lastBackup',todayStr());}catch(e){}
+  showToast('데이터 내보내기 완료');
+}
+function importData(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    try{
+      const imported = JSON.parse(ev.target.result);
+      if(!imported.version){showToast('올바른 파일이 아닙니다');return;}
+      if(!confirm('현재 데이터를 덮어쓸까요?')) return;
+      data = {...defaultData(),...imported};
+      saveData();
+      updateAll();
+      renderConstellations();
+      showToast('데이터 가져오기 완료 ✦');
+    }catch(err){showToast('파일을 읽을 수 없습니다');}
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+function resetAllData(){
+  if(!confirm('정말로 모든 데이터를 삭제할까요?\n이 작업은 되돌릴 수 없습니다.')) return;
+  if(!confirm('마지막 확인: 모든 기록이 사라집니다. 계속할까요?')) return;
+  data = defaultData();
+  saveData();
+  localStorage.removeItem(STORAGE_KEY+'_timer');
+  updateAll();
+  renderConstellations();
+  showToast('모든 데이터가 초기화됨');
+}
+
+// ===== Backup Reminder =====
+function checkBackupReminder(){
+  const banner = document.getElementById('backupBannerSettings');
+  if(!banner) return;
+  try{
+    const last = localStorage.getItem(STORAGE_KEY+'_lastBackup');
+    const logCount = data.studyLogs.length;
+    if(logCount<3){banner.innerHTML='';return;}
+    if(!last){
+      banner.innerHTML=`<div class="backup-banner" onclick="exportData()">
+        <span class="bb-icon">⚠</span>
+        <span class="bb-text">데이터를 아직 백업하지 않았습니다</span>
+        <span class="bb-action">백업 ▸</span>
+      </div>`;
+      return;
+    }
+    const lastDate = new Date(last+'T00:00:00');
+    const now = new Date();
+    now.setHours(0,0,0,0);
+    const daysSince = Math.floor((now-lastDate)/86400000);
+    if(daysSince>=7){
+      banner.innerHTML=`<div class="backup-banner" onclick="exportData()">
+        <span class="bb-icon">⚠</span>
+        <span class="bb-text">${daysSince}일 전에 마지막 백업</span>
+        <span class="bb-action">백업 ▸</span>
+      </div>`;
+    } else {
+      banner.innerHTML='';
+    }
+  }catch(e){banner.innerHTML='';}
+}
+
+// ===== UI Utilities =====
+function switchView(viewId){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById(viewId).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`.nav-btn[data-view="${viewId}"]`).classList.add('active');
+  if(viewId==='viewCalendar') renderCalendar();
+  if(viewId==='viewBooks') renderTextbooks();
+  if(viewId==='viewTimer'){document.getElementById('manualDate').value=todayStr();renderLogs();}
+  if(viewId==='viewSettings') updateSettings();
+}
+function showModal(id){
+  document.getElementById(id).classList.add('show');
+  document.querySelector(`#${id} .modal`).classList.add('show');
+}
+function closeModal(id){
+  document.getElementById(id).classList.remove('show');
+  document.querySelector(`#${id} .modal`).classList.remove('show');
+}
+function closeDayModal(e){
+  if(e && e.target!==document.getElementById('dayModal')) return;
+  closeModal('dayModal');
+}
+function closeEditModal(e){
+  if(e && e.target!==document.getElementById('editModal')) return;
+  closeModal('editModal');
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ===== Welcome =====
+function completeWelcome(){
+  const name = document.getElementById('welcomeName').value.trim();
+  if(name) data.userName = name;
+  data.lastUnlockedCount = 0;
+  saveData();
+  document.getElementById('welcomeScreen').classList.add('hidden');
+  updateAll();
+}
+
+// ===== Update All =====
+function updateAll(){
+  updateSky();
+  renderLogs();
+  updateSettings();
+}
+
+// ===== Init =====
+function init(){
+  loadData();
+
+  // Set today's date for manual input
+  document.getElementById('manualDate').value = todayStr();
+
+  // Check first launch
+  let isFirstLaunch = true;
+  try{isFirstLaunch = !localStorage.getItem(STORAGE_KEY);}catch(e){}
+  if(isFirstLaunch){
+    document.getElementById('welcomeScreen').classList.remove('hidden');
+  } else {
+    document.getElementById('welcomeScreen').classList.add('hidden');
+  }
+
+  generateBackgroundStars();
+  renderConstellations();
+  updateAll();
+  initCalendar();
+  renderTextbooks();
+  restoreTimer();
+
+  // Shooting stars
+  setInterval(()=>{
+    if(Math.random()>.6) triggerShootingStar();
+  },8000);
+
+  // Periodic update (for timer running state, d-day, etc.)
+  setInterval(()=>{updateDDay();},60000);
+}
+
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
