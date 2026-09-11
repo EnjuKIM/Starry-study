@@ -1,0 +1,24 @@
+{
+  "name": "星座づくり - 별자리 만들기",
+  "short_name": "별자리 만들기",
+  "description": "일본어 공부 900시간 별자리 트래커",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#151527",
+  "theme_color": "#151527",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
