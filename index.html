@@ -2,14 +2,14 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>星座づくり - 별자리 만들기</title>
 <meta name="theme-color" content="#151527">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" href="icon-192.png">
-<title>星座づくり - 별자리 만들기</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
@@ -64,6 +64,8 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
 .const-line{stroke:var(--gold-dim);stroke-width:.3;stroke-linecap:round}
 .constellation.unlocked .const-line{stroke:rgba(255,215,0,.5)}
 .const-star{fill:var(--gold);filter:url(#starGlow)}
+.const-star.dim{fill:rgba(255,215,0,.15);filter:none}
+.const-star.partial{fill:rgba(255,215,0,.55);filter:url(#starGlow)}
 .const-label{fill:var(--text-dim);font-size:2.5px;text-anchor:middle;font-family:-apple-system,'Segoe UI',sans-serif;opacity:0;transition:opacity 1.5s}
 .constellation.unlocked .const-label{opacity:.8}
 
@@ -299,7 +301,27 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
 .welcome-btn{padding:14px 48px;border-radius:14px;font-size:16px;font-weight:600}
 .welcome-skip{margin-top:16px;font-size:13px;color:var(--text-faint)}
 
+/* ===== Sky Start Button ===== */
+.sky-start-btn{display:flex;align-items:center;justify-content:center;gap:10px;margin:8px 16px;padding:14px;border-radius:var(--radius);background:linear-gradient(135deg,rgba(102,126,234,.2),rgba(118,75,162,.2));border:1px solid rgba(102,126,234,.3);cursor:pointer;transition:all .2s}
+.sky-start-btn:active{transform:scale(.97);background:linear-gradient(135deg,rgba(102,126,234,.3),rgba(118,75,162,.3))}
+.ssb-icon{font-size:18px;color:var(--purple)}
+.ssb-text{font-size:15px;font-weight:600;color:var(--text)}
+
+/* ===== Timer Button Labels ===== */
+.timer-btn-wrap{display:flex;flex-direction:column;align-items:center;gap:4px}
+.timer-btn-label{font-size:10px;color:var(--text-faint)}
+
 /* ===== Responsive ===== */
+@media(max-width:380px){
+  .sky-container{min-height:260px;height:48vh}
+  .sky-progress-text{font-size:26px}
+  .stat-value{font-size:17px}
+  .stat-label{font-size:9px}
+  .timer-display{font-size:44px}
+  .cal-day{font-size:12px}
+  .trend-label{font-size:8px}
+  .quote-jp{font-size:13px}
+}
 @media(min-width:600px){
   .app{max-width:480px;margin:0 auto;border-left:1px solid rgba(255,255,255,.1);border-right:1px solid rgba(255,255,255,.1)}
 }
@@ -341,7 +363,7 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
       </div>
       <div class="progress-wrap">
         <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-        <div class="progress-labels"><span id="progressPct">0%</span><span>900h</span></div>
+        <div class="progress-labels"><span id="progressPct">0%</span><span id="progressTarget">900h</span></div>
       </div>
       <div class="stats-row">
         <div class="stat-item glass-sm"><div class="stat-value" id="statRemain">900h</div><div class="stat-label">남은 시간</div></div>
@@ -352,6 +374,13 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
         <div class="daily-goal-ring"><svg viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="15.5"/><circle class="ring-fill" id="dgRing" cx="18" cy="18" r="15.5" stroke-dasharray="97.4" stroke-dashoffset="97.4"/></svg></div>
         <div class="daily-goal-info"><div class="dg-title">오늘 목표</div><div class="dg-value" id="dgValue">0m <span>/ 0m</span></div></div>
       </div>
+      <div class="backup-home glass-sm" id="backupHome" style="display:none;margin:4px 16px;padding:8px 14px;cursor:pointer" onclick="switchView('viewSettings')">
+        <span style="font-size:11px;color:var(--text-faint)" id="backupHomeText"></span>
+      </div>
+      <button class="sky-start-btn glass" id="skyStartBtn" onclick="skyStartAction()">
+        <span class="ssb-icon" id="ssbIcon">▶</span>
+        <span class="ssb-text" id="ssbText">공부 시작</span>
+      </button>
       <div class="quote-box glass-sm card" id="quoteBox">
         <div class="quote-jp">千里の道も一歩から</div>
         <div class="quote-ko">천리길도 한 걸음부터</div>
@@ -363,9 +392,9 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
       <div class="timer-section">
         <div class="timer-display" id="timerDisplay">00:00:00</div>
         <div class="timer-btns">
-          <button class="timer-btn danger" id="btnTimerReset" onclick="resetTimer()" disabled>↺</button>
-          <button class="timer-btn primary" id="btnTimerMain" onclick="toggleTimer()">▶</button>
-          <button class="timer-btn success" id="btnTimerSave" onclick="saveTimerLog()" disabled>✓</button>
+          <div class="timer-btn-wrap"><button class="timer-btn danger" id="btnTimerReset" onclick="resetTimer()" disabled>↺</button><span class="timer-btn-label">초기화</span></div>
+          <div class="timer-btn-wrap"><button class="timer-btn primary" id="btnTimerMain" onclick="toggleTimer()">▶</button><span class="timer-btn-label" id="btnTimerMainLabel">시작</span></div>
+          <div class="timer-btn-wrap"><button class="timer-btn success" id="btnTimerSave" onclick="saveTimerLog()" disabled>✓</button><span class="timer-btn-label">저장</span></div>
         </div>
         <div class="manual-section glass card">
           <div class="section-title">✎ 수동 입력</div>
@@ -479,7 +508,7 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
           </div>
         </div>
         <div style="text-align:center;padding:20px 0 8px;font-size:11px;color:var(--text-faint)">
-          星座づくり v1.0
+          星座づくり v1.1
         </div>
       </div>
     </div>
@@ -630,7 +659,7 @@ function loadData(){
   }catch(e){data = defaultData();}
 }
 function saveData(){
-  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){showToast('저장 공간이 부족합니다');}
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));return true;}catch(e){showToast('저장 공간이 부족합니다');return false;}
 }
 function getTotalMinutes(){
   return data.studyLogs.reduce((s,l)=>s+l.minutes,0);
@@ -689,14 +718,22 @@ function renderConstellations(){
   const svg = document.getElementById('skySvg');
   const existing = svg.querySelectorAll('.constellation');
   existing.forEach(e=>e.remove());
+  const hours = getTotalHours();
   const unlocked = getUnlockedCount();
 
   CONSTELLATIONS.forEach((con,idx)=>{
-    if(idx===8) return; // Milky Way handled separately
+    if(idx===8) return;
     const g = document.createElementNS('http://www.w3.org/2000/svg','g');
     g.classList.add('constellation');
     g.id = 'const-'+con.id;
-    if(idx<unlocked) g.classList.add('unlocked');
+    const isUnlocked = idx<unlocked;
+    if(isUnlocked) g.classList.add('unlocked');
+
+    const prevHours = idx>0?CONSTELLATIONS[idx-1].hours:0;
+    const progress = isUnlocked?1:Math.max(0,Math.min(1,(hours-prevHours)/(con.hours-prevHours)));
+    const litStars = isUnlocked?con.stars.length:Math.floor(progress*con.stars.length);
+    const isProgressing = !isUnlocked && progress>0;
+    if(isProgressing) g.classList.add('unlocked');
 
     con.lines.forEach(([a,b])=>{
       const line = document.createElementNS('http://www.w3.org/2000/svg','line');
@@ -705,15 +742,20 @@ function renderConstellations(){
       line.setAttribute('x2',con.stars[b].x);
       line.setAttribute('y2',con.stars[b].y);
       line.classList.add('const-line');
+      if(isProgressing && (a>=litStars||b>=litStars)) line.style.stroke='rgba(255,215,0,.12)';
       g.appendChild(line);
     });
 
-    con.stars.forEach(s=>{
+    con.stars.forEach((s,si)=>{
       const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
       c.setAttribute('cx',s.x);
       c.setAttribute('cy',s.y);
       c.setAttribute('r',.8);
       c.classList.add('const-star');
+      if(!isUnlocked){
+        if(si<litStars) c.classList.add('partial');
+        else c.classList.add('dim');
+      }
       g.appendChild(c);
     });
 
@@ -722,6 +764,7 @@ function renderConstellations(){
     t.setAttribute('y',con.ly);
     t.classList.add('const-label');
     t.textContent = con.name;
+    if(isProgressing) t.style.opacity='.4';
     g.appendChild(t);
 
     g.style.cursor = 'pointer';
@@ -739,24 +782,17 @@ function updateSky(){
 
   const remain = Math.max(0,data.targetHours-hours);
   if(hours===0) document.getElementById('skySub').textContent='별을 밝힐 시간이에요';
-  else if(progress>=1) document.getElementById('skySub').textContent='🎉 축하합니다! 모든 별자리가 빛나고 있어요!';
+  else if(progress>=1) document.getElementById('skySub').textContent='축하합니다! 목표를 달성했어요!';
   else document.getElementById('skySub').textContent=`남은 시간: ${Math.floor(remain)}h ${Math.round((remain%1)*60)}m`;
 
   document.getElementById('progressFill').style.width = (progress*100)+'%';
   document.getElementById('progressPct').textContent = Math.floor(progress*100)+'%';
+  document.getElementById('progressTarget').textContent = data.targetHours+'h';
   document.getElementById('statRemain').textContent = Math.floor(remain)+'h';
   document.getElementById('statStreak').textContent = getStreak()+'일';
   document.getElementById('statConst').textContent = unlocked+'/9';
 
-  // Update constellation visibility
-  CONSTELLATIONS.forEach((con,idx)=>{
-    if(idx===8) return;
-    const el = document.getElementById('const-'+con.id);
-    if(el){
-      if(idx<unlocked) el.classList.add('unlocked');
-      else el.classList.remove('unlocked');
-    }
-  });
+  renderConstellations();
 
   // Milky Way
   const mw = document.getElementById('milkyWay');
@@ -777,6 +813,8 @@ function updateSky(){
   updateQuote();
   updateTodayBadge();
   updateDailyGoal();
+  updateBackupHome();
+  updateSkyStartBtn();
 }
 
 function showUnlockToast(con){
@@ -790,6 +828,7 @@ function showUnlockToast(con){
 function showConstInfo(idx){
   const con = CONSTELLATIONS[idx];
   const unlocked = getUnlockedCount();
+  const h = getTotalHours();
   const info = document.getElementById('constInfo');
   document.getElementById('ciName').textContent = con.name;
   document.getElementById('ciKo').textContent = con.ko;
@@ -797,9 +836,10 @@ function showConstInfo(idx){
   if(idx<unlocked){
     document.getElementById('ciStatus').innerHTML = '<span style="color:var(--gold)">해금됨</span>';
   } else {
-    const h = getTotalHours();
+    const prevH = idx>0?CONSTELLATIONS[idx-1].hours:0;
+    const pct = Math.max(0,Math.min(100,Math.round((h-prevH)/(con.hours-prevH)*100)));
     const remain = Math.max(0,con.hours-h);
-    document.getElementById('ciStatus').innerHTML = `<span style="color:var(--text-faint)">${Math.ceil(remain)}시간 남음</span>`;
+    document.getElementById('ciStatus').innerHTML = `<span style="color:var(--text-faint)">${Math.ceil(remain)}시간 남음 (${pct}%)</span>`;
   }
   info.classList.add('show');
   setTimeout(()=>info.classList.remove('show'),3000);
@@ -925,8 +965,12 @@ function saveTimerLog(){
 function confirmTimerSave(){
   const mins = Math.floor(timerElapsed/60000);
   const note = document.getElementById('timerSaveMemo').value.trim();
-  data.studyLogs.push({id:genId(),date:todayStr(),minutes:mins,method:'stopwatch',note:note});
-  saveData();
+  const entry = {id:genId(),date:todayStr(),minutes:mins,method:'stopwatch',note:note};
+  data.studyLogs.push(entry);
+  if(!saveData()){
+    data.studyLogs.pop();
+    return;
+  }
   closeTimerSave();
   resetTimer();
   updateAll();
@@ -950,20 +994,25 @@ function updateTimerButtons(){
   const main = document.getElementById('btnTimerMain');
   const reset = document.getElementById('btnTimerReset');
   const save = document.getElementById('btnTimerSave');
+  const mainLabel = document.getElementById('btnTimerMainLabel');
   if(timerState==='running'){
     main.textContent = '⏸';
+    mainLabel.textContent = '일시정지';
     reset.disabled = true;
     save.disabled = true;
   } else if(timerState==='paused'){
     main.textContent = '▶';
+    mainLabel.textContent = '계속';
     reset.disabled = false;
     save.disabled = false;
   } else {
     main.textContent = '▶';
+    mainLabel.textContent = '시작';
     reset.disabled = true;
     save.disabled = true;
     document.getElementById('timerDisplay').classList.remove('running');
   }
+  updateSkyStartBtn();
 }
 function restoreTimer(){
   try{
@@ -999,7 +1048,10 @@ function saveManualLog(){
   if(!date){showToast('날짜를 선택하세요');return;}
   if(mins<1){showToast('시간을 입력하세요');return;}
   data.studyLogs.push({id:genId(),date:date,minutes:mins,method:'manual',note:note});
-  saveData();
+  if(!saveData()){
+    data.studyLogs.pop();
+    return;
+  }
   document.getElementById('manualHours').value='';
   document.getElementById('manualMins').value='';
   document.getElementById('manualNote').value='';
@@ -1039,6 +1091,53 @@ function deleteLog(id){
   saveData();
   updateAll();
   showToast('기록 삭제됨');
+}
+function deleteLogFromDay(id){
+  if(!confirm('이 기록을 삭제할까요?')) return;
+  data.studyLogs = data.studyLogs.filter(l=>l.id!==id);
+  saveData();
+  updateAll();
+  openDayDetail(currentDayDate);
+  showToast('기록 삭제됨');
+}
+function editLogFromDay(id){
+  const log = data.studyLogs.find(l=>l.id===id);
+  if(!log) return;
+  const h = Math.floor(log.minutes/60), m = log.minutes%60;
+  const title = document.getElementById('editModalTitle');
+  const body = document.getElementById('editModalBody');
+  title.textContent='기록 수정';
+  body.innerHTML=`<div style="display:flex;gap:8px;margin-bottom:10px">
+    <div class="input-group">
+      <label>시간</label>
+      <input class="input-field glass-sm" id="editLogH" type="number" value="${h}" min="0" max="24" style="padding:12px;text-align:center;font-size:18px">
+    </div>
+    <div class="input-group">
+      <label>분</label>
+      <input class="input-field glass-sm" id="editLogM" type="number" value="${m}" min="0" max="59" style="padding:12px;text-align:center;font-size:18px">
+    </div>
+  </div>
+  <div class="input-group" style="margin-bottom:14px">
+    <label>메모</label>
+    <input class="input-field glass-sm" id="editLogNote" value="${escHtml(log.note||'')}" placeholder="메모 (선택)" style="padding:12px">
+  </div>
+  <button class="btn btn-primary btn-block" onclick="saveLogEdit('${id}')">저장</button>`;
+  showModal('editModal');
+}
+function saveLogEdit(id){
+  const log = data.studyLogs.find(l=>l.id===id);
+  if(!log) return;
+  const h = parseInt(document.getElementById('editLogH').value)||0;
+  const m = parseInt(document.getElementById('editLogM').value)||0;
+  const mins = h*60+m;
+  if(mins<1){showToast('1분 이상이어야 합니다');return;}
+  log.minutes = mins;
+  log.note = document.getElementById('editLogNote').value.trim();
+  saveData();
+  closeModal('editModal');
+  updateAll();
+  openDayDetail(currentDayDate);
+  showToast('기록 수정됨');
 }
 
 // ===== Calendar =====
@@ -1106,11 +1205,12 @@ function renderCalendar(){
   grid.innerHTML = html;
 
   // Monthly summary
-  const totalMins = Object.values(monthLogs).reduce((s,v)=>s+v,0);
-  const studyDays = Object.keys(monthLogs).filter(k=>{
+  const monthEntries = Object.entries(monthLogs).filter(([k])=>{
     const d = new Date(k);
     return d.getFullYear()===calYear && d.getMonth()===calMonth;
-  }).length;
+  });
+  const totalMins = monthEntries.reduce((s,[,v])=>s+v,0);
+  const studyDays = monthEntries.length;
   const summary = document.getElementById('calSummary');
   summary.innerHTML = `<div style="display:flex;justify-content:space-around;text-align:center">
     <div><div style="font-size:18px;font-weight:700;color:var(--purple)">${Math.floor(totalMins/60)}h ${totalMins%60}m</div><div style="font-size:11px;color:var(--text-faint)">이번 달 공부</div></div>
@@ -1139,7 +1239,11 @@ function openDayDetail(dateStr){
     </div>`;
     dayLogs.forEach(l=>{
       const h=Math.floor(l.minutes/60),m=l.minutes%60;
-      studyHtml+=`<div style="font-size:12px;color:var(--text-faint);padding:4px 0">${l.method==='stopwatch'?'⏱':'✎'} ${h>0?h+'h ':''}${m}m${l.note?' · '+escHtml(l.note):''}</div>`;
+      studyHtml+=`<div style="display:flex;align-items:center;gap:6px;padding:6px 0">
+        <div style="flex:1;font-size:12px;color:var(--text-faint)">${l.method==='stopwatch'?'⏱':'✎'} ${h>0?h+'h ':''}${m}m${l.note?' · '+escHtml(l.note):''}</div>
+        <button style="font-size:11px;color:var(--purple);padding:2px 6px" onclick="editLogFromDay('${l.id}')">수정</button>
+        <button style="font-size:11px;color:var(--red);padding:2px 6px" onclick="deleteLogFromDay('${l.id}')">삭제</button>
+      </div>`;
     });
   } else {
     studyHtml = '<div style="font-size:13px;color:var(--text-faint);padding:8px 0">이 날의 공부 기록이 없습니다</div>';
@@ -1524,6 +1628,44 @@ function checkBackupReminder(){
       banner.innerHTML='';
     }
   }catch(e){banner.innerHTML='';}
+}
+
+function skyStartAction(){
+  switchView('viewTimer');
+  if(timerState==='stopped') toggleTimer();
+}
+function updateSkyStartBtn(){
+  const icon = document.getElementById('ssbIcon');
+  const text = document.getElementById('ssbText');
+  if(timerState==='running'){
+    icon.textContent='⏱';text.textContent='공부 중... (타이머로 이동)';
+  } else if(timerState==='paused'){
+    icon.textContent='⏸';text.textContent='일시정지 중 (타이머로 이동)';
+  } else {
+    icon.textContent='▶';text.textContent='공부 시작';
+  }
+}
+function updateBackupHome(){
+  const el = document.getElementById('backupHome');
+  const txt = document.getElementById('backupHomeText');
+  if(!el||data.studyLogs.length<3){el.style.display='none';return;}
+  try{
+    const last = localStorage.getItem(STORAGE_KEY+'_lastBackup');
+    if(!last){
+      el.style.display='block';
+      txt.innerHTML='⚠ 아직 백업하지 않았어요 — <span style="color:var(--red)">설정에서 백업</span>';
+    } else {
+      const lastDate = new Date(last+'T00:00:00');
+      const now = new Date();now.setHours(0,0,0,0);
+      const daysSince = Math.floor((now-lastDate)/86400000);
+      if(daysSince>=7){
+        el.style.display='block';
+        txt.innerHTML=`⚠ ${daysSince}일 전 마지막 백업 — <span style="color:var(--gold)">백업하기</span>`;
+      } else {
+        el.style.display='none';
+      }
+    }
+  }catch(e){el.style.display='none';}
 }
 
 // ===== UI Utilities =====
