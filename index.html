@@ -264,6 +264,21 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
 .backup-banner .bb-text{flex:1;font-size:12px;color:var(--text-dim)}
 .backup-banner .bb-action{font-size:11px;color:var(--red);white-space:nowrap}
 
+/* ===== Safety Box (home) / Sync ===== */
+.safe-warn{margin:4px 16px 8px;padding:12px 14px;border-radius:var(--radius-sm);background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25)}
+.safe-warn .sw-title{font-size:13px;font-weight:600;color:var(--text)}
+.safe-warn .sw-sub{font-size:11px;color:var(--text-faint);margin-top:2px}
+.safe-warn .sw-btns{display:flex;gap:6px;margin-top:10px}
+.safe-warn .sw-btns button{flex:1;padding:8px 6px;border-radius:8px;font-size:12px;font-weight:600}
+.safe-warn .sw-sync{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+.safe-warn .sw-backup{border:1px solid var(--glass-border);color:var(--text-dim)}
+.safe-ok{margin:4px 16px;padding:6px 14px;font-size:11px;color:var(--text-faint);display:flex;align-items:center;gap:6px;cursor:pointer}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text-faint);flex-shrink:0;display:inline-block}
+.sync-dot.ok{background:var(--green)}
+.sync-dot.busy{background:var(--gold)}
+.sync-dot.bad{background:var(--red)}
+.sync-desc{font-size:11px;color:var(--text-faint);padding:6px 4px 2px;line-height:1.6}
+
 /* ===== Timer Save Modal ===== */
 .timer-save-modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:150;display:none;align-items:center;justify-content:center;padding:20px}
 .timer-save-modal.show{display:flex}
@@ -338,6 +353,7 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
     <input class="welcome-input" id="welcomeName" type="text" placeholder="이름을 입력하세요">
     <button class="btn btn-gold welcome-btn" onclick="completeWelcome()">시작하기 ✦</button>
     <button class="welcome-skip" onclick="completeWelcome()">건너뛰기</button>
+    <button class="welcome-skip" style="color:var(--purple)" onclick="welcomeLogin()">이미 계정이 있어요 · 로그인 ☁</button>
   </div>
 
   <!-- Views -->
@@ -374,9 +390,7 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
         <div class="daily-goal-ring"><svg viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="15.5"/><circle class="ring-fill" id="dgRing" cx="18" cy="18" r="15.5" stroke-dasharray="97.4" stroke-dashoffset="97.4"/></svg></div>
         <div class="daily-goal-info"><div class="dg-title">오늘 목표</div><div class="dg-value" id="dgValue">0m <span>/ 0m</span></div></div>
       </div>
-      <div class="backup-home glass-sm" id="backupHome" style="display:none;margin:4px 16px;padding:8px 14px;cursor:pointer" onclick="switchView('viewSettings')">
-        <span style="font-size:11px;color:var(--text-faint)" id="backupHomeText"></span>
-      </div>
+      <div id="safeBox" style="display:none"></div>
       <button class="sky-start-btn glass" id="skyStartBtn" onclick="skyStartAction()">
         <span class="ssb-icon" id="ssbIcon">▶</span>
         <span class="ssb-text" id="ssbText">공부 시작</span>
@@ -491,6 +505,10 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
           </div>
         </div>
         <div class="setting-group">
+          <div class="setting-group-title">계정 동기화</div>
+          <div id="syncSettings"></div>
+        </div>
+        <div class="setting-group">
           <div class="setting-group-title">데이터</div>
           <div id="backupBannerSettings"></div>
           <div class="setting-item glass-sm" onclick="exportData()">
@@ -508,7 +526,7 @@ input,textarea,select{font:inherit;color:inherit;background:none;border:none;out
           </div>
         </div>
         <div style="text-align:center;padding:20px 0 8px;font-size:11px;color:var(--text-faint)">
-          星座づくり v1.1
+          星座づくり v1.2
         </div>
       </div>
     </div>
@@ -647,7 +665,8 @@ function defaultData(){
     version:1,userName:'',targetHours:900,
     dday:null,dailyGoal:0,
     studyLogs:[],textbooks:[],diaryEntries:[],
-    lastUnlockedCount:0
+    lastUnlockedCount:0,
+    settingsU:0,deleted:{}
   };
 }
 let data = defaultData();
@@ -658,8 +677,17 @@ function loadData(){
     if(raw) data = {...defaultData(),...JSON.parse(raw)};
   }catch(e){data = defaultData();}
 }
-function saveData(){
+function saveLocal(){
   try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));return true;}catch(e){showToast('저장 공간이 부족합니다');return false;}
+}
+function saveData(){
+  const ok = saveLocal();
+  if(getSyncInfo()) schedulePush();
+  return ok;
+}
+function markDeleted(key){
+  if(!data.deleted) data.deleted = {};
+  data.deleted[key] = Date.now();
 }
 function getTotalMinutes(){
   return data.studyLogs.reduce((s,l)=>s+l.minutes,0);
@@ -806,14 +834,14 @@ function updateSky(){
       showUnlockToast(newCon);
     }
     data.lastUnlockedCount = unlocked;
-    saveData();
+    saveLocal();
   }
 
   updateDDay();
   updateQuote();
   updateTodayBadge();
   updateDailyGoal();
-  updateBackupHome();
+  renderSafeBox();
   updateSkyStartBtn();
 }
 
@@ -965,7 +993,7 @@ function saveTimerLog(){
 function confirmTimerSave(){
   const mins = Math.floor(timerElapsed/60000);
   const note = document.getElementById('timerSaveMemo').value.trim();
-  const entry = {id:genId(),date:todayStr(),minutes:mins,method:'stopwatch',note:note};
+  const entry = {id:genId(),date:todayStr(),minutes:mins,method:'stopwatch',note:note,u:Date.now()};
   data.studyLogs.push(entry);
   if(!saveData()){
     data.studyLogs.pop();
@@ -1047,7 +1075,7 @@ function saveManualLog(){
   const mins = h*60+m;
   if(!date){showToast('날짜를 선택하세요');return;}
   if(mins<1){showToast('시간을 입력하세요');return;}
-  data.studyLogs.push({id:genId(),date:date,minutes:mins,method:'manual',note:note});
+  data.studyLogs.push({id:genId(),date:date,minutes:mins,method:'manual',note:note,u:Date.now()});
   if(!saveData()){
     data.studyLogs.pop();
     return;
@@ -1088,6 +1116,7 @@ function renderLogs(){
 function deleteLog(id){
   if(!confirm('이 기록을 삭제할까요?')) return;
   data.studyLogs = data.studyLogs.filter(l=>l.id!==id);
+  markDeleted(id);
   saveData();
   updateAll();
   showToast('기록 삭제됨');
@@ -1095,6 +1124,7 @@ function deleteLog(id){
 function deleteLogFromDay(id){
   if(!confirm('이 기록을 삭제할까요?')) return;
   data.studyLogs = data.studyLogs.filter(l=>l.id!==id);
+  markDeleted(id);
   saveData();
   updateAll();
   openDayDetail(currentDayDate);
@@ -1133,6 +1163,7 @@ function saveLogEdit(id){
   if(mins<1){showToast('1분 이상이어야 합니다');return;}
   log.minutes = mins;
   log.note = document.getElementById('editLogNote').value.trim();
+  log.u = Date.now();
   saveData();
   closeModal('editModal');
   updateAll();
@@ -1270,7 +1301,7 @@ function saveDiary(){
   if(!text && !photo){showToast('내용을 입력하세요');return;}
 
   const existing = data.diaryEntries.findIndex(e=>e.date===currentDayDate);
-  const entry = {id:genId(),date:currentDayDate,text:text,photo:photo};
+  const entry = {id:genId(),date:currentDayDate,text:text,photo:photo,u:Date.now()};
   if(existing>=0) data.diaryEntries[existing]=entry;
   else data.diaryEntries.push(entry);
   saveData();
@@ -1281,6 +1312,7 @@ function saveDiary(){
 function deleteDiary(){
   if(!confirm('이 일기를 삭제할까요?')) return;
   data.diaryEntries = data.diaryEntries.filter(e=>e.date!==currentDayDate);
+  markDeleted('diary:'+currentDayDate);
   saveData();
   closeModal('dayModal');
   renderCalendar();
@@ -1370,7 +1402,7 @@ function addTextbook(){
   const name = nameInput.value.trim();
   const pages = parseInt(pagesInput.value)||0;
   if(!name){showToast('교재 이름을 입력하세요');return;}
-  data.textbooks.push({id:genId(),name:name,addedDate:todayStr(),status:'active',totalPages:pages,currentPage:0});
+  data.textbooks.push({id:genId(),name:name,addedDate:todayStr(),status:'active',totalPages:pages,currentPage:0,u:Date.now()});
   saveData();
   nameInput.value='';
   pagesInput.value='';
@@ -1385,6 +1417,7 @@ function updatePage(id){
   book.currentPage = val;
   if(val>0 && val>=(book.totalPages||0)) book.status='done';
   else if(book.status==='done' && val<(book.totalPages||0)) book.status='active';
+  book.u = Date.now();
   saveData();
   renderTextbooks();
   showToast(val>=(book.totalPages||0)?'교재 완료! 🎉':'진행 상황 저장됨');
@@ -1395,13 +1428,14 @@ function focusPageInput(id){
 }
 function toggleBookStatus(id){
   const book = data.textbooks.find(b=>b.id===id);
-  if(book) book.status = book.status==='active'?'done':'active';
+  if(book){book.status = book.status==='active'?'done':'active';book.u = Date.now();}
   saveData();
   renderTextbooks();
 }
 function deleteTextbook(id){
   if(!confirm('이 교재를 삭제할까요?')) return;
   data.textbooks = data.textbooks.filter(b=>b.id!==id);
+  markDeleted(id);
   saveData();
   renderTextbooks();
   showToast('교재 삭제됨');
@@ -1435,6 +1469,7 @@ function saveTextbookEdit(id){
   if(book.currentPage>pages && pages>0) book.currentPage = pages;
   if(pages>0 && book.currentPage>=pages) book.status='done';
   else if(book.status==='done' && book.currentPage<pages) book.status='active';
+  book.u = Date.now();
   saveData();
   closeModal('editModal');
   renderTextbooks();
@@ -1474,6 +1509,7 @@ function updateDDay(){
 function updateSettings(){
   document.getElementById('settingName').textContent = data.userName||'미설정';
   document.getElementById('settingTarget').textContent = data.targetHours+'h';
+  renderSyncSettings();
   if(data.dailyGoal>0){
     const gh=Math.floor(data.dailyGoal/60),gm=data.dailyGoal%60;
     document.getElementById('settingDailyGoal').textContent = (gh>0?gh+'시간 ':'')+(gm>0?gm+'분':'');
@@ -1550,6 +1586,7 @@ function saveSetting(type){
     const m = parseInt(document.getElementById('editDgMins').value)||0;
     data.dailyGoal = h*60+m;
   }
+  data.settingsU = Date.now();
   saveData();
   closeModal('editModal');
   updateAll();
@@ -1563,10 +1600,14 @@ function exportData(){
   const a = document.createElement('a');
   a.href = url;
   a.download = 'hoshimichi_backup_'+todayStr()+'.json';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
   try{localStorage.setItem(STORAGE_KEY+'_lastBackup',todayStr());}catch(e){}
-  showToast('데이터 내보내기 완료');
+  renderSafeBox();
+  checkBackupReminder();
+  showToast('백업 파일 저장 완료 (다운로드 폴더)');
 }
 function importData(e){
   const file = e.target.files[0];
@@ -1577,10 +1618,9 @@ function importData(e){
       const imported = JSON.parse(ev.target.result);
       if(!imported.version){showToast('올바른 파일이 아닙니다');return;}
       if(!confirm('현재 데이터를 덮어쓸까요?')) return;
-      data = {...defaultData(),...imported};
+      data = {...defaultData(),...imported,settingsU:Date.now()};
       saveData();
-      updateAll();
-      renderConstellations();
+      refreshViews();
       showToast('데이터 가져오기 완료 ✦');
     }catch(err){showToast('파일을 읽을 수 없습니다');}
   };
@@ -1589,12 +1629,17 @@ function importData(e){
 }
 function resetAllData(){
   if(!confirm('정말로 모든 데이터를 삭제할까요?\n이 작업은 되돌릴 수 없습니다.')) return;
-  if(!confirm('마지막 확인: 모든 기록이 사라집니다. 계속할까요?')) return;
-  data = defaultData();
+  if(!confirm('마지막 확인: 모든 기록이 사라집니다.'+(getSyncInfo()?'\n로그인된 계정의 서버 기록도 함께 지워져요.':'')+' 계속할까요?')) return;
+  // Tombstone everything so a synced copy doesn't bring it back
+  const now = Date.now();
+  const tomb = {...(data.deleted||{})};
+  data.studyLogs.forEach(l=>{tomb[l.id]=now;});
+  data.textbooks.forEach(b=>{tomb[b.id]=now;});
+  data.diaryEntries.forEach(e=>{tomb['diary:'+e.date]=now;});
+  data = {...defaultData(),deleted:tomb,settingsU:now};
   saveData();
-  localStorage.removeItem(STORAGE_KEY+'_timer');
-  updateAll();
-  renderConstellations();
+  try{localStorage.removeItem(STORAGE_KEY+'_timer');}catch(e){}
+  refreshViews();
   showToast('모든 데이터가 초기화됨');
 }
 
@@ -1605,7 +1650,7 @@ function checkBackupReminder(){
   try{
     const last = localStorage.getItem(STORAGE_KEY+'_lastBackup');
     const logCount = data.studyLogs.length;
-    if(logCount<3){banner.innerHTML='';return;}
+    if(logCount<1 || getSyncInfo()){banner.innerHTML='';return;}
     if(!last){
       banner.innerHTML=`<div class="backup-banner" onclick="exportData()">
         <span class="bb-icon">⚠</span>
@@ -1645,27 +1690,381 @@ function updateSkyStartBtn(){
     icon.textContent='▶';text.textContent='공부 시작';
   }
 }
-function updateBackupHome(){
-  const el = document.getElementById('backupHome');
-  const txt = document.getElementById('backupHomeText');
-  if(!el||data.studyLogs.length<3){el.style.display='none';return;}
+// ===== Home Safety Box (sync status or backup reminder) =====
+function daysSinceBackup(){
   try{
     const last = localStorage.getItem(STORAGE_KEY+'_lastBackup');
-    if(!last){
-      el.style.display='block';
-      txt.innerHTML='⚠ 아직 백업하지 않았어요 — <span style="color:var(--red)">설정에서 백업</span>';
-    } else {
-      const lastDate = new Date(last+'T00:00:00');
-      const now = new Date();now.setHours(0,0,0,0);
-      const daysSince = Math.floor((now-lastDate)/86400000);
-      if(daysSince>=7){
-        el.style.display='block';
-        txt.innerHTML=`⚠ ${daysSince}일 전 마지막 백업 — <span style="color:var(--gold)">백업하기</span>`;
-      } else {
-        el.style.display='none';
-      }
+    if(!last) return null;
+    const lastDate = new Date(last+'T00:00:00');
+    const now = new Date();now.setHours(0,0,0,0);
+    return Math.floor((now-lastDate)/86400000);
+  }catch(e){return null;}
+}
+function renderSafeBox(){
+  const el = document.getElementById('safeBox');
+  if(!el) return;
+  const info = getSyncInfo();
+  if(info){
+    const st = SYNC_LABEL[sync.status]||SYNC_LABEL.connecting;
+    el.className = 'safe-ok';
+    el.style.display = 'flex';
+    el.onclick = ()=>switchView('viewSettings');
+    el.innerHTML = `<span class="sync-dot ${st.cls}"></span><span>☁ ${escHtml(info.id)} · ${st.text}</span>`;
+    return;
+  }
+  const days = daysSinceBackup();
+  if(data.studyLogs.length<1 || (days!==null && days<7)){el.style.display='none';return;}
+  el.className = 'safe-warn';
+  el.style.display = 'block';
+  el.onclick = null;
+  el.innerHTML = `<div class="sw-title">⚠ 기록이 이 폰에만 저장돼 있어요</div>
+    <div class="sw-sub">폰 교체·업데이트·브라우저 정리 때 사라질 수 있어요 · ${days===null?'백업한 적 없음':'마지막 백업 '+days+'일 전'}</div>
+    <div class="sw-btns">
+      <button class="sw-sync" onclick="openLogin()">☁ 로그인 동기화</button>
+      <button class="sw-backup" onclick="exportData()">💾 백업 파일 저장</button>
+    </div>`;
+}
+
+// ===== Account Sync (Firebase Firestore) =====
+// Account = 아이디 + 비밀번호 → SHA-256 → Firestore doc id. Main doc holds the
+// data (without photos) as a JSON string; diary photos live in a "photos"
+// subcollection keyed by diary entry id. Devices merge (union by id, newest
+// edit wins, tombstones for deletes), so offline edits on two phones converge.
+const FB_CONFIG = {
+  apiKey:"AIzaSyBYK2MZllNTmvLD9uUkas3RfAtObU6nfZU",
+  authDomain:"rmqdurptksr.firebaseapp.com",
+  projectId:"rmqdurptksr",
+  storageBucket:"rmqdurptksr.firebasestorage.app",
+  messagingSenderId:"657236251355",
+  appId:"1:657236251355:web:17af9ce536cafc3963f2fe"
+};
+const FB_BASE = 'https://www.gstatic.com/firebasejs/10.12.2/';
+const SYNC_COLL = 'starry_study_users';
+const SYNC_KEY = STORAGE_KEY+'_sync';
+const SYNC_LABEL = {
+  off:{text:'',cls:''},
+  connecting:{text:'연결 중…',cls:'busy'},
+  saving:{text:'저장 중…',cls:'busy'},
+  synced:{text:'자동 저장됨',cls:'ok'},
+  offline:{text:'오프라인 · 이 폰엔 저장됨',cls:'bad'},
+  stalled:{text:'연결 지연 · 이 폰엔 저장됨',cls:'bad'},
+  error:{text:'서버 오류 · 이 폰엔 저장됨',cls:'bad'}
+};
+let db = null, fbLoading = null;
+let sync = {ref:null,unsub:null,status:'off',pushTimer:null,retryTimer:null,stallTimer:null,pushing:false,again:false};
+const photoFetching = new Set();
+
+function getSyncInfo(){
+  try{
+    const raw = localStorage.getItem(SYNC_KEY);
+    if(!raw) return null;
+    const s = JSON.parse(raw);
+    return s&&s.docId?s:null;
+  }catch(e){return null;}
+}
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = res;
+    s.onerror = ()=>{s.remove();rej(new Error('load failed: '+src));};
+    document.head.appendChild(s);
+  });
+}
+function loadFirebase(){
+  if(db) return Promise.resolve(db);
+  if(!fbLoading){
+    fbLoading = (window.firebase?Promise.resolve():loadScript(FB_BASE+'firebase-app-compat.js'))
+      .then(()=>(window.firebase&&firebase.firestore)?null:loadScript(FB_BASE+'firebase-firestore-compat.js'))
+      .then(()=>{
+        if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+        db = firebase.firestore();
+        return db;
+      })
+      .catch(e=>{fbLoading=null;throw e;});
+  }
+  return fbLoading;
+}
+async function accountDocId(id,pw){
+  const txt = 'starry-study|'+id.trim().toLowerCase()+'|'+pw;
+  const buf = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(txt));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function setSyncStatus(s){
+  sync.status = s;
+  clearTimeout(sync.stallTimer);
+  if(s==='connecting'||s==='saving'){
+    sync.stallTimer = setTimeout(()=>{if(sync.status===s) setSyncStatus('stalled');},10000);
+  }
+  renderSafeBox();
+  renderSyncSettings();
+}
+
+// What goes to the server: no photos (only a hasPhoto flag), no per-device state
+function toRemote(d){
+  return {
+    version:1,userName:d.userName||'',targetHours:d.targetHours,dday:d.dday||null,dailyGoal:d.dailyGoal||0,
+    settingsU:d.settingsU||0,
+    studyLogs:d.studyLogs||[],
+    textbooks:d.textbooks||[],
+    diaryEntries:(d.diaryEntries||[]).map(e=>{
+      const r = {...e};
+      delete r.photo;
+      if(e.photo||e.hasPhoto) r.hasPhoto = true; else delete r.hasPhoto;
+      return r;
+    }),
+    deleted:d.deleted||{}
+  };
+}
+function parseRemote(docData){
+  try{return {...defaultData(),...JSON.parse(docData.payload)};}catch(e){return null;}
+}
+function stableStr(v){
+  if(Array.isArray(v)) return '['+v.map(stableStr).join(',')+']';
+  if(v&&typeof v==='object') return '{'+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+stableStr(v[k])).join(',')+'}';
+  return JSON.stringify(v===undefined?null:v);
+}
+// Order-insensitive fingerprint, so two devices never ping-pong over array order
+function canon(d){
+  const r = toRemote(d);
+  const by = k=>(a,b)=>String(a[k]).localeCompare(String(b[k]));
+  return stableStr({...r,
+    studyLogs:[...r.studyLogs].sort(by('id')),
+    textbooks:[...r.textbooks].sort(by('id')),
+    diaryEntries:[...r.diaryEntries].sort(by('date'))});
+}
+function mergeData(a,b){
+  if(!b) return a;
+  const deleted = {...(a.deleted||{})};
+  Object.entries(b.deleted||{}).forEach(([k,t])=>{deleted[k]=Math.max(deleted[k]||0,t);});
+  // local first (keeps local order and wins ties), remote replaces only if edited later
+  const pick = (la,lb,key)=>{
+    const m = new Map();
+    la.forEach(x=>m.set(x[key],x));
+    lb.forEach(x=>{const cur=m.get(x[key]);if(!cur||(x.u||0)>(cur.u||0)) m.set(x[key],x);});
+    return [...m.values()];
+  };
+  const studyLogs = pick(a.studyLogs||[],b.studyLogs||[],'id').filter(x=>!deleted[x.id]);
+  const textbooks = pick(a.textbooks||[],b.textbooks||[],'id').filter(x=>!deleted[x.id]);
+  const diaryEntries = pick(a.diaryEntries||[],b.diaryEntries||[],'date').filter(x=>!((deleted['diary:'+x.date]||0)>=(x.u||0)));
+  // settings: newest edit wins; on a tie (e.g. fresh phone vs. account) the server copy wins
+  const s = (b.settingsU||0)>=(a.settingsU||0)?b:a;
+  return {...a,
+    userName:s.userName,targetHours:s.targetHours,dday:s.dday,dailyGoal:s.dailyGoal,settingsU:s.settingsU||0,
+    studyLogs,textbooks,diaryEntries,deleted};
+}
+function refreshViews(){
+  updateAll();
+  renderTextbooks();
+  renderCalendar();
+}
+// Fold a server copy into local data; re-render only if something changed
+function absorb(remote){
+  if(!remote) return;
+  const m = mergeData(data,remote);
+  if(canon(m)!==canon(data)){
+    data = m;
+    saveLocal();
+    refreshViews();
+  }
+  fetchMissingPhotos();
+}
+
+function schedulePush(delay){
+  if(!getSyncInfo()) return;
+  clearTimeout(sync.pushTimer);
+  sync.pushTimer = setTimeout(()=>{sync.pushTimer=null;pushNow();},delay==null?1200:delay);
+  if(sync.status!=='saving') setSyncStatus('saving');
+}
+async function pushNow(){
+  if(!sync.ref){startSync();return;}
+  if(sync.pushing){sync.again=true;return;}
+  sync.pushing = true;
+  setSyncStatus('saving');
+  const ref = sync.ref;
+  try{
+    await uploadPhotos(ref);
+    const merged = await db.runTransaction(async tx=>{
+      const snap = await tx.get(ref);
+      const remote = snap.exists?parseRemote(snap.data()):null;
+      const m = mergeData(data,remote);
+      tx.set(ref,{payload:JSON.stringify(toRemote(m)),updatedAt:Date.now(),app:'starry-study'});
+      return m;
+    });
+    if(ref!==sync.ref) return;
+    absorb(merged);
+    cleanupPhotos(ref);
+    setSyncStatus('synced');
+  }catch(e){
+    console.warn('sync push failed',e);
+    if(ref!==sync.ref) return;
+    setSyncStatus(e&&e.code==='permission-denied'?'error':'offline');
+    clearTimeout(sync.retryTimer);
+    sync.retryTimer = setTimeout(()=>schedulePush(0),20000);
+  }finally{
+    sync.pushing = false;
+    if(sync.again){sync.again=false;schedulePush(300);}
+  }
+}
+
+function getUploaded(){
+  try{return new Set(JSON.parse(localStorage.getItem(SYNC_KEY+'_photos')||'[]'));}catch(e){return new Set();}
+}
+function setUploaded(s){
+  try{localStorage.setItem(SYNC_KEY+'_photos',JSON.stringify([...s]));}catch(e){}
+}
+async function uploadPhotos(ref){
+  const up = getUploaded();
+  for(const e of data.diaryEntries){
+    if(e.photo && !up.has(e.id)){
+      await ref.collection('photos').doc(e.id).set({photo:e.photo,date:e.date});
+      up.add(e.id);
+      setUploaded(up);
     }
-  }catch(e){el.style.display='none';}
+  }
+}
+function cleanupPhotos(ref){
+  const up = getUploaded();
+  const live = new Set(data.diaryEntries.map(e=>e.id));
+  up.forEach(id=>{
+    if(!live.has(id)){
+      ref.collection('photos').doc(id).delete().catch(()=>{});
+      up.delete(id);
+    }
+  });
+  setUploaded(up);
+}
+function fetchMissingPhotos(){
+  const ref = sync.ref;
+  if(!ref) return;
+  data.diaryEntries.forEach(e=>{
+    if(!e.hasPhoto || e.photo || photoFetching.has(e.id)) return;
+    photoFetching.add(e.id);
+    ref.collection('photos').doc(e.id).get().then(s=>{
+      if(!s.exists || ref!==sync.ref) return;
+      const cur = data.diaryEntries.find(x=>x.id===e.id);
+      if(cur && !cur.photo){
+        cur.photo = s.data().photo;
+        const up = getUploaded(); up.add(e.id); setUploaded(up);
+        saveLocal();
+      }
+    }).catch(()=>{}).finally(()=>photoFetching.delete(e.id));
+  });
+}
+
+async function startSync(){
+  const info = getSyncInfo();
+  if(!info){setSyncStatus('off');return;}
+  if(sync.ref && sync.ref.id===info.docId) return;
+  setSyncStatus('connecting');
+  try{await loadFirebase();}
+  catch(e){setSyncStatus('offline');return;}
+  const cur = getSyncInfo();
+  if(!cur || cur.docId!==info.docId) return;
+  if(sync.unsub) sync.unsub();
+  sync.ref = db.collection(SYNC_COLL).doc(info.docId);
+  sync.unsub = sync.ref.onSnapshot(snap=>{
+    if(snap.metadata.hasPendingWrites) return;
+    const remote = snap.exists?parseRemote(snap.data()):null;
+    absorb(remote);
+    if(!remote || canon(data)!==canon(remote)) schedulePush(300);
+    else if(!sync.pushing && !sync.pushTimer) setSyncStatus('synced');
+  },err=>{
+    console.warn('sync listen failed',err);
+    setSyncStatus(err&&err.code==='permission-denied'?'error':'offline');
+  });
+}
+function stopSync(){
+  if(sync.unsub) sync.unsub();
+  clearTimeout(sync.pushTimer);clearTimeout(sync.retryTimer);clearTimeout(sync.stallTimer);
+  sync = {ref:null,unsub:null,status:'off',pushTimer:null,retryTimer:null,stallTimer:null,pushing:false,again:false};
+}
+
+function openLogin(){
+  const title = document.getElementById('editModalTitle');
+  const body = document.getElementById('editModalBody');
+  title.textContent = '로그인 / 계정 만들기';
+  body.innerHTML = `<div class="input-group" style="margin-bottom:10px">
+    <label>아이디</label>
+    <input class="input-field glass-sm" id="loginId" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="2자 이상" style="padding:12px">
+  </div>
+  <div class="input-group" style="margin-bottom:10px">
+    <label>비밀번호</label>
+    <input class="input-field glass-sm" id="loginPw" type="password" autocomplete="current-password" placeholder="4자 이상" style="padding:12px" onkeydown="if(event.key==='Enter')doLogin()">
+  </div>
+  <div class="sync-desc" style="margin-bottom:12px">
+    · 처음이면 원하는 아이디·비밀번호를 정하면 새 계정이 만들어져요<br>
+    · 다른 폰에서 같은 아이디·비밀번호로 로그인하면 기록을 그대로 불러와요<br>
+    · 이 폰에 있던 기록은 계정 기록과 합쳐져요 (지워지지 않아요)<br>
+    · <b style="color:var(--gold)">비밀번호 찾기 기능이 없으니 꼭 기억해 두세요</b>
+  </div>
+  <button class="btn btn-primary btn-block" id="loginBtn" onclick="doLogin()">로그인</button>`;
+  showModal('editModal');
+  setTimeout(()=>{const el=document.getElementById('loginId');if(el) el.focus();},350);
+}
+async function doLogin(){
+  const id = document.getElementById('loginId').value.trim();
+  const pw = document.getElementById('loginPw').value;
+  if(id.length<2){showToast('아이디를 2자 이상 입력하세요');return;}
+  if(pw.length<4){showToast('비밀번호를 4자 이상 입력하세요');return;}
+  if(!window.crypto||!crypto.subtle){showToast('이 브라우저에서는 로그인을 쓸 수 없어요');return;}
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = '확인 중…';
+  try{
+    const docId = await accountDocId(id,pw);
+    await loadFirebase();
+    const snap = await db.collection(SYNC_COLL).doc(docId).get();
+    if(!snap.exists){
+      const ok = confirm(`'${id}' 계정을 찾지 못했어요.\n\n• 처음이라면 → [확인]을 눌러 새 계정을 만드세요\n• 이미 계정이 있다면 → [취소] 후 아이디·비밀번호를 다시 확인하세요\n\n아이디와 비밀번호를 꼭 기억해 두세요.`);
+      if(!ok) return;
+    }
+    stopSync();
+    localStorage.setItem(SYNC_KEY,JSON.stringify({id:id,docId:docId}));
+    localStorage.removeItem(SYNC_KEY+'_photos');
+    closeModal('editModal');
+    if(snap.exists) absorb(parseRemote(snap.data()));
+    await startSync();
+    schedulePush(0);
+    refreshViews();
+    showToast(snap.exists?'로그인됨 · 기록을 불러왔어요 ☁':'계정을 만들었어요 · 자동 저장 시작 ☁');
+  }catch(e){
+    console.warn('login failed',e);
+    showToast('연결 실패 · 인터넷 연결을 확인하세요');
+  }finally{
+    btn.disabled = false; btn.textContent = '로그인';
+  }
+}
+function doLogout(){
+  if(!confirm('로그아웃할까요?\n이 폰의 기록은 그대로 남고, 서버 자동 저장만 멈춰요.')) return;
+  stopSync();
+  try{localStorage.removeItem(SYNC_KEY);localStorage.removeItem(SYNC_KEY+'_photos');}catch(e){}
+  setSyncStatus('off');
+  updateAll();
+  showToast('로그아웃됨');
+}
+function renderSyncSettings(){
+  const box = document.getElementById('syncSettings');
+  if(!box) return;
+  const info = getSyncInfo();
+  if(!info){
+    box.innerHTML = `<div class="setting-item glass-sm" onclick="openLogin()">
+      <span class="setting-label">로그인 / 계정 만들기</span>
+      <span class="setting-value" style="color:var(--purple)">☁ ▸</span>
+    </div>
+    <div class="sync-desc">로그인하면 기록이 서버에 자동 저장돼요. 폰을 바꾸거나 업데이트해도 같은 아이디로 로그인하면 그대로 불러와요.</div>`;
+    return;
+  }
+  const st = SYNC_LABEL[sync.status]||SYNC_LABEL.connecting;
+  box.innerHTML = `<div class="setting-item glass-sm" onclick="schedulePush(0)">
+      <span class="setting-label">☁ ${escHtml(info.id)}</span>
+      <span class="setting-value"><span class="sync-dot ${st.cls}"></span>${st.text}</span>
+    </div>
+    <div class="setting-item glass-sm" onclick="doLogout()">
+      <span class="setting-label" style="color:var(--text-dim)">로그아웃</span>
+      <span class="setting-value">▸</span>
+    </div>
+    <div class="sync-desc">기록할 때마다 자동으로 서버에 저장돼요. 계정 줄을 누르면 지금 바로 동기화해요.</div>`;
 }
 
 // ===== UI Utilities =====
@@ -1712,6 +2111,11 @@ function completeWelcome(){
   document.getElementById('welcomeScreen').classList.add('hidden');
   updateAll();
 }
+function welcomeLogin(){
+  completeWelcome();
+  switchView('viewSettings');
+  openLogin();
+}
 
 // ===== Update All =====
 function updateAll(){
@@ -1742,6 +2146,18 @@ function init(){
   initCalendar();
   renderTextbooks();
   restoreTimer();
+
+  // Ask the browser not to evict our storage (helps against cleanup on low space)
+  try{if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();}catch(e){}
+
+  // Account sync
+  startSync();
+  window.addEventListener('online',()=>{if(getSyncInfo()){if(!sync.ref) startSync(); else schedulePush(0);}});
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible' && getSyncInfo() && ['offline','stalled','error'].includes(sync.status)){
+      if(!sync.ref) startSync(); else schedulePush(0);
+    }
+  });
 
   // Shooting stars
   setInterval(()=>{
